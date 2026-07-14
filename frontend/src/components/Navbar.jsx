@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getRiwayatByUser } from '../services/cutiService'; // TAMBAHAN: Mengambil fungsi hit database service yang sama dengan ApplyCuti
+import { getRiwayatByUser } from '../services/CutiService'; // TAMBAHAN: Mengambil fungsi hit database service yang sama dengan ApplyCuti
 import './Navbar.css'; 
 
 // Tambahkan parameter object user untuk mengambil id data dari database/API
