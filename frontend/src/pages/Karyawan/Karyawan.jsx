@@ -9,17 +9,17 @@ import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 import { isSuperAdmin, isHrAdmin } from '../../utils/roles';
 import DataDivisi from './components/DataDivisi';
 import LogSistem from './components/LogSistem';
-import { initialLogs } from './data/mockLogs'
 import LeaveFormHr from './components/LeaveFormHr';
 import LeaveListHr from './components/LeaveListHr';
 import {allLeaveHistory} from '../Cuti/approve/data/mockData';
 import FormCuti from '../Cuti/approve/components/Form';
 import { getKaryawanList, deleteKaryawan } from '../../services/karyawanService';
+import { getSystemLogs } from '../../services/logService'; 
 
 
 const Karyawan = ({ user }) => {
     // 2. Tambahkan state untuk Log
-  const [logList, setLogList] = useState(initialLogs);
+    const [logList, setLogList] = useState([]);
 
   // State untuk menyimpan data cuti yang sedang diklik tombol "Rincian"-nya
 const [detailCutiTarget, setDetailCutiTarget] = useState(null);
@@ -80,9 +80,44 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
     }
   };
 
+
+  // [BARU] Fungsi fetch untuk Log Sistem dari Backend
+  const fetchLogs = async () => {
+  try {
+    const response = await getSystemLogs();
+    const logsData = response.data || response || [];
+    
+    // Melakukan mapping data dari backend ke format yang dimengerti LogSistem
+    const formattedLogs = logsData.map(log => {
+      // Memisahkan tanggal dan jam dari createdAt (LocalDateTime)
+      const dateObj = new Date(log.createdAt);
+      
+      return {
+        id: log.logId,
+        tanggal: dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+        jam: dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        aktor: log.username,
+        aksi: log.description || log.action, // Menggunakan description atau action dari backend
+        type: 'normal' // Sesuaikan jika ada field type di backend
+      };
+    });
+    
+    setLogList(formattedLogs);
+  } catch (error) {
+    console.error("Gagal menarik data log dari server:", error);
+  }
+};
+
   useEffect(() => {
     fetchKaryawan();
   }, []);
+
+  // [BARU] Efek ini hanya akan memanggil API Log jika tab Log Sistem diklik
+  useEffect(() => {
+    if (activeTab === 'Log Sistem') {
+      fetchLogs();
+    }
+  }, [activeTab]);
 
   const handleSubmitAddForm = async (formData) => {
     // Catatan: registrasi ke backend (termasuk upload foto) SUDAH dilakukan
