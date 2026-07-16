@@ -11,32 +11,19 @@ import ProfileToast from './components/ProfileToast';
 //   - ProfileViewSection : mode baca (banner, avatar, nama, grid info)
 //   - ProfileEditModal   : mode edit (popup form, termasuk ProfileFieldInput & ProfilePasswordSection)
 //   - ProfileToast       : notifikasi setelah simpan
-// Yang beda per role hanya: `currentUserRole` (untuk aturan lock field).
-// Data profil diambil lewat endpoint self-service backend (GET/PUT
-// /api/karyawan/me) yang otomatis tahu user mana dari token JWT — jadi
-// komponen ini TIDAK PERLU tahu employeeId sama sekali.
-const ProfilePageBase = ({ currentUserRole }) => {
+// Yang beda per role hanya: `currentUserRole` (untuk aturan lock field) dan `mockData` (data profil awal).
+const ProfilePageBase = ({ currentUserRole, mockData }) => {
   // Helper: cek apakah field boleh diedit oleh role yang sedang login
   const isFieldEditable = (cfg) => !cfg.lockedFor || !cfg.lockedFor.includes(currentUserRole);
 
   const {
-    isEditing, loading, loadError, profileImage, chosenFileName, toast, saving, saveError,
+    isEditing, loading, profileImage, chosenFileName, toast, saving,
     fileInputRef, formData, draftData, passwordData, passwordError,
     openEdit, closeEdit, handleDraftChange, handlePasswordChange,
-    handleImageChange, triggerFileInput, handleSave,
-  } = useProfileForm(currentUserRole);
+    handleImageChange, handleAvatarChange, triggerFileInput, handleSave,
+  } = useProfileForm(currentUserRole, mockData);
 
   if (loading) return <div className="profile-loading">Memuat data...</div>;
-
-  if (loadError) {
-    return (
-      <div className="profile-page-container">
-        <p style={{ padding: 40, color: 'red' }}>
-          Gagal memuat profil: {loadError}
-        </p>
-      </div>
-    );
-  }
 
   const kolomKiri = FIELD_CONFIG.filter((f) => f.column === 'kiri');
   const kolomKanan = FIELD_CONFIG.filter((f) => f.column === 'kanan');
@@ -49,7 +36,7 @@ const ProfilePageBase = ({ currentUserRole }) => {
           formData={formData}
           profileImage={profileImage}
           fileInputRef={fileInputRef}
-          onImageChange={handleImageChange}
+          onImageChange={handleAvatarChange}
           onTriggerFileInput={triggerFileInput}
           onOpenEdit={openEdit}
           kolomKiri={kolomKiri}

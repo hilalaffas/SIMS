@@ -33,6 +33,7 @@ export const useProfileForm = (currentUserRole, mockData) => {
         setFormData(profile);
         setDraftData(profile);
         setProfileImage(profile.photoUrl || null);
+        window.dispatchEvent(new CustomEvent('profile-updated', { detail: profile }));
       } catch (error) {
         // Tetap tampilkan UI jika server belum aktif; data tidak akan tersimpan sampai API tersedia.
         if (active) {
@@ -74,6 +75,32 @@ export const useProfileForm = (currentUserRole, mockData) => {
     reader.onloadend = () => setProfileImage(reader.result);
     reader.readAsDataURL(file);
   };
+
+  // Input avatar pada halaman baca tidak memiliki tombol "Simpan". Karena itu
+  // foto di jalur ini langsung diunggah, lalu sidebar ikut diperbarui.
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    setProfileImage(previewUrl);
+    window.dispatchEvent(new CustomEvent('profile-updated', {
+      detail: { ...formData, photoUrl: previewUrl },
+    }));
+    try {
+      const saved = await updateMyProfile({}, file);
+      setFormData(saved);
+      setDraftData(saved);
+      setProfileImage(saved.photoUrl || null);
+      window.dispatchEvent(new CustomEvent('profile-updated', { detail: saved }));
+    } catch (error) {
+      setProfileImage(formData.photoUrl || null);
+      window.dispatchEvent(new CustomEvent('profile-updated', { detail: formData }));
+      console.error('Gagal mengunggah foto profil:', error);
+    } finally {
+      URL.revokeObjectURL(previewUrl);
+      e.target.value = '';
+    }
+  };
   const triggerFileInput = () => fileInputRef.current?.click();
 
   const handleSave = async (e) => {
@@ -100,6 +127,9 @@ export const useProfileForm = (currentUserRole, mockData) => {
       setFormData(saved);
       setDraftData(saved);
       setProfileImage(saved.photoUrl || profileImage);
+      // Sidebar membaca state user global. Kirim data terbaru agar avatar dan
+      // nama di sidebar berubah tanpa reload halaman.
+      window.dispatchEvent(new CustomEvent('profile-updated', { detail: saved }));
       setIsEditing(false);
       setToast(true);
       clearTimeout(toastTimer.current);
@@ -111,5 +141,5 @@ export const useProfileForm = (currentUserRole, mockData) => {
     }
   };
 
-  return { isEditing, loading, profileImage, chosenFileName, toast, saving, fileInputRef, formData, draftData, passwordData, passwordError, openEdit, closeEdit, handleDraftChange, handlePasswordChange, handleImageChange, triggerFileInput, handleSave };
+  return { isEditing, loading, profileImage, chosenFileName, toast, saving, fileInputRef, formData, draftData, passwordData, passwordError, openEdit, closeEdit, handleDraftChange, handlePasswordChange, handleImageChange, handleAvatarChange, triggerFileInput, handleSave };
 };

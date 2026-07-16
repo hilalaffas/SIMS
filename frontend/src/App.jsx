@@ -22,9 +22,29 @@ const AppContent = () => {
   useEffect(() => {
     const storedName = localStorage.getItem('user_name');
     const storedRole = localStorage.getItem('user_role');
+    const storedAvatarUrl = localStorage.getItem('user_avatar_url');
     if (storedName && storedRole) {
-      setCurrentUser({ name: storedName, role: storedRole });
+      setCurrentUser({ name: storedName, role: storedRole, avatar_url: storedAvatarUrl });
     }
+  }, []);
+
+  // Profil dimuat/disimpan dari halaman Profile. Sinkronkan ringkasan user
+  // yang dipakai Sidebar agar foto, nama, dan role tidak tertinggal.
+  useEffect(() => {
+    const syncProfileSummary = (event) => {
+      const profile = event.detail;
+      if (!profile) return;
+      setCurrentUser((current) => ({
+        ...current,
+        name: profile.namaLengkap || current.name,
+        avatar_url: profile.photoUrl || null,
+      }));
+      if (profile.namaLengkap) localStorage.setItem('user_name', profile.namaLengkap);
+      if (profile.photoUrl) localStorage.setItem('user_avatar_url', profile.photoUrl);
+      else localStorage.removeItem('user_avatar_url');
+    };
+    window.addEventListener('profile-updated', syncProfileSummary);
+    return () => window.removeEventListener('profile-updated', syncProfileSummary);
   }, []);
 
   const TOAST_DURATION = 2500; // durasi toast tampil (ms), bisa disesuaikan 2000-3000
@@ -40,6 +60,7 @@ const AppContent = () => {
     // dengan token dummy lagi.
     localStorage.setItem('user_name', userData.name);
     localStorage.setItem('user_role', userData.role);
+    localStorage.removeItem('user_avatar_url');
 
     // Update state agar aplikasi me-render ulang dengan data user baru
     setCurrentUser({ name: userData.name, role: userData.role });
@@ -71,13 +92,6 @@ const AppContent = () => {
       {/* Global Toast Notification */}
       {toast.show && <Toast message={toast.message} type={toast.type} />}
 
-      {/* Main Application Routes */}
-      <AppRoutes 
-        user={currentUser} 
-        onLogout={() => setIsLogoutModalOpen(true)} 
-        onLoginSuccess={handleLoginSuccess} 
-      />
-
       {/* Global Logout Modal */}
       {isLogoutModalOpen && (
         <LogoutModal 
@@ -85,6 +99,13 @@ const AppContent = () => {
           onCancel={() => setIsLogoutModalOpen(false)} 
         />
       )}
+
+      {/* Main Application Routes */}
+      <AppRoutes 
+        user={currentUser} 
+        onLogout={() => setIsLogoutModalOpen(true)} 
+        onLoginSuccess={handleLoginSuccess} 
+      />
     </div>
   );
 };
