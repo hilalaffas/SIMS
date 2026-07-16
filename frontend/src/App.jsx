@@ -71,6 +71,13 @@ const AppContent = () => {
       {/* Global Toast Notification */}
       {toast.show && <Toast message={toast.message} type={toast.type} />}
 
+      {/* Main Application Routes */}
+      <AppRoutes 
+        user={currentUser} 
+        onLogout={() => setIsLogoutModalOpen(true)} 
+        onLoginSuccess={handleLoginSuccess} 
+      />
+
       {/* Global Logout Modal */}
       {isLogoutModalOpen && (
         <LogoutModal 
@@ -78,13 +85,6 @@ const AppContent = () => {
           onCancel={() => setIsLogoutModalOpen(false)} 
         />
       )}
-
-      {/* Main Application Routes */}
-      <AppRoutes 
-        user={currentUser} 
-        onLogout={() => setIsLogoutModalOpen(true)} 
-        onLoginSuccess={handleLoginSuccess} 
-      />
     </div>
   );
 };

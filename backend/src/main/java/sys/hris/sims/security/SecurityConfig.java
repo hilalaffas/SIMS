@@ -249,7 +249,7 @@ public class SecurityConfig {
                         // ACTIVITY LOG
                         // ==========================
                         .requestMatchers("/api/admin/**")
-                        .hasAnyRole("ADMIN", "HRD_ADMIN")
+                        .hasAnyRole("ADMIN", "HRD_ADMIN", "SUPER_ADMIN")
 
                         // ==========================
                         // Holiday

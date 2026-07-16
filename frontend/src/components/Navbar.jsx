@@ -121,6 +121,12 @@ export default function Navbar({ toggleSidebar, user }) {
 
   return (
     <header className="navbar-header">
+      {/* DIEDIT: Tombol Hamburger hanya dirender jika diakses melalui handphone/mobile (lebar layar <= 768px) */}
+      {isMobile && (
+        <button className="btn-hamburger" onClick={toggleSidebar}>
+          <i className="fa-solid fa-bars"></i>
+        </button>
+      )}
       <div className="navbar-brand">
         <div className="navbar-title-container">
           <span className="badge-sims">SIMS</span>
@@ -128,14 +134,7 @@ export default function Navbar({ toggleSidebar, user }) {
         </div>
         <p className="navbar-subtitle">{getSubHeaderTitle()}</p>
       </div>
-      
-      {/* DIEDIT: Tombol Hamburger hanya dirender jika diakses melalui handphone/mobile (lebar layar <= 768px) */}
-      {isMobile && (
-        <button className="btn-hamburger" onClick={toggleSidebar}>
-          <i className="fa-solid fa-bars"></i>
-        </button>
-      )}
-      
+         
       <div className="navbar-actions">
         <span className="navbar-date">{currentDate}</span>
         
