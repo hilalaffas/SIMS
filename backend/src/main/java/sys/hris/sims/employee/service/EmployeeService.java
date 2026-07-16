@@ -32,6 +32,22 @@ public class EmployeeService {
                 .orElseThrow(() -> new RuntimeException("Karyawan tidak ditemukan"));
     }
 
+    // Dipakai endpoint GET /api/karyawan/me — ambil profil milik user yang sedang login.
+    public Employee getMyProfile(String username) {
+        return karyawanRepository.findFirstByUser_Username(username)
+                .orElseThrow(() -> new RuntimeException("Profil karyawan tidak ditemukan untuk username: " + username));
+    }
+
+    // CATATAN: updateKaryawan() di bawah ini HANYA menyimpan 6 field
+    // (fullName, address, phoneNumber, gender, joinDate, isActive) — field
+    // kontak darurat, foto, divisi, NIK tidak ikut tersimpan meski di-set di
+    // objek yang dikirim. Ini kemungkinan bug lama yang juga memengaruhi
+    // endpoint admin PUT /{id}. Untuk endpoint self-service /me, dipakai
+    // method save() polos ini supaya semua field yang di-set controller
+    // benar-benar tersimpan.
+    public Employee save(Employee employee) {
+        return karyawanRepository.save(employee);
+    }
     public Employee createKaryawan(Employee karyawan) {
         return karyawanRepository.save(karyawan);
     }
@@ -47,8 +63,16 @@ public class EmployeeService {
         //
         // Perbaikannya: simpan langsung entity yang sudah di-update controller,
         // tidak perlu fetch ulang & copy manual.
-        karyawanBaru.setEmployeeId(id); // jaga-jaga, pastikan ID tetap konsisten (update, bukan insert baru)
-        return karyawanRepository.save(karyawanBaru);
+        //karyawanBaru.setEmployeeId(id); // jaga-jaga, pastikan ID tetap konsisten (update, bukan insert baru)
+        //return karyawanRepository.save(karyawanBaru);
+        Employee karyawan = getKaryawanById(id);
+        karyawan.setFullName(karyawanBaru.getFullName());
+        karyawan.setAddress(karyawanBaru.getAddress()); 
+        karyawan.setPhoneNumber(karyawanBaru.getPhoneNumber());
+        karyawan.setGender(karyawanBaru.getGender());
+        karyawan.setJoinDate(karyawanBaru.getJoinDate());
+        karyawan.setIsActive(karyawanBaru.getIsActive());
+        return karyawanRepository.save(karyawan);
     }
 
     public void deleteKaryawan(Long id) {

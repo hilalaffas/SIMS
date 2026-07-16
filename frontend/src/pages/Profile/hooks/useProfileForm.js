@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import {
+  fetchEmployeeProfile,
+  mapEmployeeToFormData,
+  updateEmployeeProfile,
+  changePassword as changePasswordApi,
+} from '../services/profileApi'; // sesuaikan path import dengan struktur project Anda
 
 // Helper: ambil inisial dari nama lengkap, dipakai saat foto profil belum diupload
 export const getInitials = (fullName) => {
@@ -12,17 +18,25 @@ export const getInitials = (fullName) => {
 
 // Semua state & handler ProfilePageBase dikumpulkan di sini, supaya komponen
 // tampilan (ProfileViewSection, ProfileEditModal, dll) cukup terima props saja.
-export const useProfileForm = (currentUserRole, mockData) => {
+//
+// employeeId TIDAK LAGI dibutuhkan sebagai parameter — backend sekarang
+// punya endpoint self-service (GET & PUT /api/karyawan/me) yang otomatis
+// tahu siapa user yang login dari token JWT, jadi hook ini cukup butuh
+// currentUserRole saja (untuk aturan lock field).
+export const useProfileForm = (currentUserRole) => {
   const [isEditing, setIsEditing] = useState(false); // Kontrol buka/tutup modal edit
   const [loading, setLoading] = useState(true);
-  const [profileImage, setProfileImage] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [profileImage, setProfileImage] = useState(null); // preview (base64) untuk foto yang BELUM disimpan
   const [chosenFileName, setChosenFileName] = useState('');
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState(null); // File asli untuk dikirim ke backend saat save
   const [toast, setToast] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const fileInputRef = useRef(null);
   const toastTimer = useRef(null);
 
-  // Data profil yang tampil di halaman (data tersimpan/final)
+  // Data profil yang tampil di halaman (data tersimpan/final, hasil GET dari backend)
   const [formData, setFormData] = useState({
     namaLengkap: '',
     nikKaryawan: '',
@@ -32,7 +46,9 @@ export const useProfileForm = (currentUserRole, mockData) => {
     nomorTelepon: '',
     divisi: '',
     tanggalBergabung: '',
-    nomorTeleponDarurat: ''
+    nomorTeleponDarurat: '',
+    hubunganDarurat: '',
+    photoUrl: null,
   });
 
   // Data sementara yang diketik user di dalam form edit — belum tersimpan sampai klik "Simpan Perubahan"
@@ -46,18 +62,32 @@ export const useProfileForm = (currentUserRole, mockData) => {
   });
   const [passwordError, setPasswordError] = useState('');
 
+  // --- Load profil dari backend ---
   useEffect(() => {
-    // Simulasi Fetch API dari Database — data awal berbeda per role, dikirim lewat prop `mockData`
-    setFormData(mockData);
-    setDraftData(mockData);
+    let cancelled = false;
 
-    const savedImage = localStorage.getItem(`user_profile_image_${currentUserRole}`);
-    if (savedImage) {
-      setProfileImage(savedImage);
-    }
+    setLoading(true);
+    setLoadError(null);
 
-    setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchEmployeeProfile()
+      .then((employee) => {
+        if (cancelled) return;
+        const mapped = mapEmployeeToFormData(employee);
+        setFormData(mapped);
+        setDraftData(mapped);
+        if (mapped.photoUrl) {
+          // Sesuaikan base URL statik ini dengan cara backend serve file di `uploads/photos/`
+          setProfileImage(mapped.photoUrl);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err.message || 'Gagal memuat profil');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [currentUserRole]);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
@@ -67,7 +97,9 @@ export const useProfileForm = (currentUserRole, mockData) => {
     setDraftData(formData);
     setPasswordData({ kataSandiLama: '', kataSandiBaru: '', ulangiSandiBaru: '' });
     setPasswordError('');
+    setSaveError('');
     setChosenFileName('');
+    setSelectedPhotoFile(null);
     setIsEditing(true);
   };
 
@@ -85,16 +117,15 @@ export const useProfileForm = (currentUserRole, mockData) => {
     setPasswordError('');
   };
 
+  // Foto: hanya preview + simpan File asli di state. Upload sungguhan
+  // terjadi saat handleSave, dikirim sebagai bagian dari multipart form data.
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       setChosenFileName(file.name);
+      setSelectedPhotoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
-        setProfileImage(base64String);
-        localStorage.setItem(`user_profile_image_${currentUserRole}`, base64String);
-      };
+      reader.onloadend = () => setProfileImage(reader.result);
       reader.readAsDataURL(file);
     }
   };
@@ -105,9 +136,10 @@ export const useProfileForm = (currentUserRole, mockData) => {
     }
   };
 
-  // Simpan Perubahan ke Database
-  const handleSave = (e) => {
+  // Simpan Perubahan ke backend
+  const handleSave = async (e) => {
     e.preventDefault();
+    setSaveError('');
 
     // Validasi kata sandi hanya jika user memang mengisinya
     const inginGantiSandi = passwordData.kataSandiBaru || passwordData.ulangiSandiBaru;
@@ -127,25 +159,43 @@ export const useProfileForm = (currentUserRole, mockData) => {
     }
 
     setSaving(true);
-    // Simulasi panggilan API (ganti dengan axios.post / fetch ke backend Anda)
-    setTimeout(() => {
-      setFormData(draftData);
-      console.log("Data baru berhasil disimpan ke DB:", draftData);
+    try {
+      // 1. Update data profil (selalu jalan)
+      const updatedEmployee = await updateEmployeeProfile(draftData, selectedPhotoFile);
+      const mapped = mapEmployeeToFormData(updatedEmployee);
+      setFormData(mapped);
+      setProfileImage(mapped.photoUrl || profileImage);
+
+      // 2. Ganti password (endpoint terpisah dari update profil)
       if (inginGantiSandi) {
-        console.log("Kata sandi diperbarui");
+        await changePasswordApi({
+          oldPassword: passwordData.kataSandiLama,
+          newPassword: passwordData.kataSandiBaru,
+          confirmPassword: passwordData.ulangiSandiBaru,
+        });
       }
+
       setSaving(false);
       setIsEditing(false);
+      setSelectedPhotoFile(null);
 
       // Tampilkan toast notifikasi di kanan bawah
       setToast(true);
       clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => setToast(false), 3500);
-    }, 500);
+    } catch (err) {
+      setSaving(false);
+      // Pesan error dari backend (mis. "Password lama salah") ditampilkan apa adanya
+      if (inginGantiSandi && /password/i.test(err.message || '')) {
+        setPasswordError(err.message);
+      } else {
+        setSaveError(err.message || 'Gagal menyimpan perubahan. Coba lagi.');
+      }
+    }
   };
 
   return {
-    isEditing, loading, profileImage, chosenFileName, toast, saving,
+    isEditing, loading, loadError, profileImage, chosenFileName, toast, saving, saveError,
     fileInputRef, formData, draftData, passwordData, passwordError,
     openEdit, closeEdit, handleDraftChange, handlePasswordChange,
     handleImageChange, triggerFileInput, handleSave,

@@ -71,12 +71,78 @@ public class EmployeeController {
         return ResponseEntity.ok(response);
     }
 
+    // GET profil karyawan milik user yang sedang login (dipakai halaman Profile).
+    // Ditaruh sebelum /{id} supaya jelas ini endpoint khusus, meski Spring MVC
+    // tetap akan mencocokkan /me secara literal lebih spesifik daripada /{id}.
+    @GetMapping("/me")
+    public ResponseEntity<Employee> getMyProfile(Authentication authentication, HttpServletRequest httpRequest) {
+
+        Employee me = karyawanService.getMyProfile(authentication.getName());
+
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication),
+                "GET_MY_PROFILE", "employees", me.getEmployeeId(), "Melihat profil sendiri", httpRequest);
+
+        return ResponseEntity.ok(me);
+    }
     // GET karyawan by ID
     @GetMapping("/{id}")
     public ResponseEntity<Employee> getKaryawanById(@PathVariable Long id, Authentication authentication, HttpServletRequest httpRequest) {
         return ResponseEntity.ok(karyawanService.getKaryawanById(id));
     }
 
+    // PUT update profil milik user yang sedang login (dipakai halaman Profile).
+    // Beda dari PUT /{id} (khusus admin): endpoint ini SENGAJA tidak memproses
+    // field yang terkunci untuk semua role (nikKaryawan, divisiId, gender,
+    // tanggal bergabung) walau field itu ada di UpdateEmployeeRequest — supaya
+    // user tidak bisa mengubahnya lewat endpoint profil sendiri, kirim manual
+    // sekalipun (mis. lewat Postman). Perubahan data itu tetap harus lewat
+    // modul HR/Karyawan yang memakai endpoint admin.
+    @PutMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> updateMyProfile(
+            @ModelAttribute UpdateEmployeeRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+
+        Employee employee = karyawanService.getMyProfile(authentication.getName());
+
+        if (isNotBlank(request.getFullName())) employee.setFullName(request.getFullName());
+        if (isNotBlank(request.getAddress())) employee.setAddress(request.getAddress());
+        if (isNotBlank(request.getPhoneNumber())) employee.setPhoneNumber(request.getPhoneNumber());
+        if (isNotBlank(request.getEmergencyContactName())) employee.setEmergencyContactName(request.getEmergencyContactName());
+        if (isNotBlank(request.getEmergencyContactPhone())) employee.setEmergencyContactPhone(request.getEmergencyContactPhone());
+
+        if (request.getEmergencyContactRelationshipId() != null) {
+            var rel = relationshipRepository.findById(request.getEmergencyContactRelationshipId()).orElse(null);
+            employee.setEmergencyContactRelationship(rel);
+        }
+
+        if (request.getPhoto() != null && !request.getPhoto().isEmpty()) {
+            try {
+                if (employee.getPhoto() != null) {
+                    Files.deleteIfExists(Paths.get(employee.getPhoto()));
+                }
+
+                String uploadDir = "uploads/photos/";
+                Path uploadPath = Paths.get(uploadDir);
+                if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
+
+                String fileName = UUID.randomUUID().toString() + "_" + request.getPhoto().getOriginalFilename();
+                Path filePath = uploadPath.resolve(fileName);
+                Files.copy(request.getPhoto().getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+                employee.setPhoto(filePath.toString());
+            } catch (Exception e) {
+                return ResponseEntity.internalServerError().body("Gagal mengupdate foto: " + e.getMessage());
+            }
+        }
+
+        Employee updated = karyawanService.save(employee);
+
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication),
+                "UPDATE_MY_PROFILE", "employees", employee.getEmployeeId(), "Mengupdate profil sendiri", httpRequest);
+
+        return ResponseEntity.ok(updated);
+    }
     // POST tambah karyawan
     @PostMapping
     public ResponseEntity<Employee> createKaryawan(@RequestBody Employee karyawan, Authentication authentication, HttpServletRequest httpRequest) {

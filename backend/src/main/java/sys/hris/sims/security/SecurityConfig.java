@@ -124,16 +124,26 @@ public class SecurityConfig {
                         // ==========================
                         // EMPLOYEE
                         // ==========================
-                        // Dipakai formulir pengajuan cuti untuk memilih atasan.
-                        // Harus dideklarasikan sebelum pola /api/karyawan/** yang khusus admin.
+                        // PENTING: aturan /me ini harus di atas "GET /api/karyawan/**"
+                        // di bawah, karena Spring Security mencocokkan berurutan dari
+                        // atas — aturan pertama yang cocok yang dipakai. Kalau ini
+                        // ditaruh di bawah, /me akan ikut ke-block hasAnyRole(ADMIN_ROLES).
+                        .requestMatchers(HttpMethod.GET, "/api/karyawan/me")
+                        .authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/karyawan/approvers")
                         .authenticated()
+                        
 
                         .requestMatchers(HttpMethod.GET, "/api/karyawan/**")
                         .hasAnyRole(ADMIN_ROLES)
 
                         .requestMatchers(HttpMethod.POST, "/api/karyawan")
                         .hasAnyRole(ADMIN_ROLES)
+
+                        // PENTING: sama seperti GET /me, ini juga harus di atas
+                        // "PUT /api/karyawan/**" di bawah supaya tidak ke-block ADMIN_ROLES.
+                        .requestMatchers(HttpMethod.PUT, "/api/karyawan/me")
+                        .authenticated()
 
                         .requestMatchers(HttpMethod.PUT, "/api/karyawan/**")
                         .hasAnyRole(ADMIN_ROLES)
@@ -204,7 +214,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT,
                                 "/api/cuti/*/resubmit")
                         .authenticated()
-
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/cuti/**")
                         .hasAnyRole(ADMIN_ROLES)
