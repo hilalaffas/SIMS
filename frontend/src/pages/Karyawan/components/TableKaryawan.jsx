@@ -7,7 +7,7 @@ const TableKaryawan = ({ data, currentUserRole, onEdit }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
 
   // 1. Ambil daftar jabatan yang unik dari database/props 'data' untuk dropdown dinamis
-  const uniqueJabatan = [...new Set(data.map(emp => emp.position).filter(Boolean))];
+  //const uniqueJabatan = [...new Set(data.map(emp => emp.position).filter(Boolean))];
 
   // 2. Buat fungsi filter untuk Search dan Jabatan
   const filteredData = data.filter((emp) => {
@@ -34,11 +34,12 @@ const TableKaryawan = ({ data, currentUserRole, onEdit }) => {
             onChange={(e) => setFilterJabatan(e.target.value)}
           >
             <option value="">Semua Jabatan</option>
-            {uniqueJabatan.map((jabatan, index) => (
-              <option key={index} value={jabatan}>
-                {jabatan}
-              </option>
-            ))}
+            <option value="Staff">Staff</option>
+            <option value="Leader">Leader</option>
+            <option value="SPV">SPV</option>
+            <option value="Manager">Manager</option>
+            <option value="HRD_Admin">HR Admin</option>
+            <option value="HRD_Karyawan">HR Karyawan</option>
           </select>
           
           <div className="search-box">

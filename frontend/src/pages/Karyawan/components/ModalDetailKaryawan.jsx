@@ -16,7 +16,7 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
   const [formData, setFormData] = useState({
     id: null, employeeId: null, userId: null,
     namaLengkap: '', nik: '', jabatan: '', alamat: '',
-    email: '', divisiId: '', telp: '', telpDarurat: '', hubDarurat: '',
+    email: '', divisiId: '', telp: '', namaDarurat: '', telpDarurat: '', hubDarurat: '',
     tglGabung: '', username: '', password: '', role: '', status: '',
     cutiTahunan: 0, cutiSakit: 0
   });
@@ -86,6 +86,7 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
         email: employeeData.user?.email || '',
         divisiId: employeeData.divisi?.id || '',
         telp: employeeData.phoneNumber || '',
+        namaDarurat: employeeData.emergencyContactName || '',
         telpDarurat: employeeData.emergencyContactPhone || '',
         // Hubungan darurat biasanya berelasi ke tabel reference
         hubDarurat: employeeData.emergencyContactRelationship?.name || '',
@@ -149,6 +150,7 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
     employeeForm.append('phoneNumber', formData.telp);
     employeeForm.append('nikKaryawan', formData.nik);
     employeeForm.append('divisiId', formData.divisiId);
+    employeeForm.append('emergencyContactName', formData.namaDarurat);
     employeeForm.append('emergencyContactPhone', formData.telpDarurat);
     if (relasiTerpilih) employeeForm.append('emergencyContactRelationshipId', relasiTerpilih.id);
     // [BARU] Jabatan (kolom baru di backend, lihat migration V20)
@@ -250,10 +252,12 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
                 <label>JABATAN / POSISI</label>
                 <select name="jabatan" value={formData.jabatan} onChange={handleInputChange}>
                   <option value="">Pilih Jabatan...</option>
-                  <option value="Senior Software Engineer">Senior Software Engineer</option>
-                  <option value="Manager">Manager</option>
-                  <option value="HR Admin">HR Admin</option>
                   <option value="Staff">Staff</option>
+                  <option value="Leader">Leader</option>
+                  <option value="SPV">SPV</option>
+                  <option value="Manager">Manager</option>
+                  <option value="HRD_Admin">HR Admin</option>
+                  <option value="HRD_Karyawan">HR Karyawan</option>
                 </select>
               </div>
             </div>
@@ -284,6 +288,10 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
               <div className="form-group_detail_karyawan">
                 <label>NOMOR TELEPON PRIBADI</label>
                 <input type="text" name="telp" value={formData.telp} onChange={handleInputChange} />
+              </div>
+              <div className="form-group_detail_karyawan error-group_detail_karyawan">
+                <label>KONTAK DARURAT (NAMA) *</label>
+                <input type="text" name="namaDarurat" value={formData.namaDarurat} onChange={handleInputChange} />
               </div>
               <div className="form-group_detail_karyawan error-group_detail_karyawan">
                 <label>NOMOR TELEPON DARURAT *</label>
