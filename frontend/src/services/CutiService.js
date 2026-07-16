@@ -3,6 +3,12 @@ import { api } from './api';
 const statusLabel = (value) => ({ PENDING: 'Dalam Proses', APPROVED: 'Disetujui (ACC)', RETURNED: 'Dikembalikan', REJECTED: 'Ditolak' }[String(value || '').toUpperCase()] || value || 'Dalam Proses');
 const statusCode = (value) => ({ PENDING: 'PROSES', APPROVED: 'DISETUJUI', RETURNED: 'DIKEMBALIKAN', REJECTED: 'DITOLAK' }[String(value || '').toUpperCase()] || 'PROSES');
 const dateText = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+const logDateText = (value) => value ? new Intl.DateTimeFormat('sv-SE', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+}).format(new Date(value)).replace(',', '') : '-';
+const logStatusLabel = (value) => ({
+  PENDING: 'DIAJUKAN', APPROVED: 'DISETUJUI (ACC)', RETURNED: 'DIKEMBALIKAN (RETURN)', REJECTED: 'DITOLAK',
+}[String(value || '').toUpperCase()] || value || '-');
 
 export const getLeaveBalance = () => api.get('/api/cuti/balance/me');
 export const getApprovers = (role) => api.get(`/api/karyawan/approvers?role=${role}`);
@@ -49,6 +55,7 @@ export function mapMyLeave(item) {
 }
 
 export async function getRiwayatByUser() { return (await api.get('/api/cuti/me')).map(mapMyLeave); }
+export const getMyLeaveDetail = (id) => api.get(`/api/cuti/me/${id}`);
 
 export async function getTeamLeaveByYear(year) {
   const requests = await api.get(`/api/cuti/calendar?year=${year}`);
@@ -77,20 +84,36 @@ export function mapApproval(item) {
   const logs = item.approvalLogs || [];
   const chain = Object.fromEntries(['LEADER', 'SPV', 'MANAGER'].map(role => {
     const entry = logs.find(log => log.approverRole === role);
-    return [role.toLowerCase(), entry ? `${entry.approverName || role} (${entry.action})` : 'None'];
+    return [role.toLowerCase(), entry?.approverName || '-'];
   }));
+  const submissionLog = item.submittedAt ? [{
+    nama: item.employeeName || 'Pemohon', waktu: logDateText(item.submittedAt), statusBadge: 'DIAJUKAN',
+    catatan: 'Permohonan cuti diajukan.',
+  }] : [];
+
   return {
     id: item.leaveRequestId,
     karyawan: { nama: item.employeeName, kode: `CUTI-${item.leaveRequestId}`, jabatan: '-' },
     jenisCuti: item.leaveType,
     durasi: `${dateText(item.startDate)} - ${dateText(item.endDate)} (${item.totalDays} Hari)`,
-    keterangan: item.reason || '-', pekerjaanDicover: [item.pendingWork, item.coveredBy].filter(Boolean).join(' • '),
+    keterangan: item.reason || '-',
+    pekerjaanTertunda: item.pendingWork || '-',
+    dicoverOleh: item.coveredBy || '-',
     statusBerkas: statusCode(item.overallStatus),
     approvalChain: chain,
-    riwayatLog: logs.map(log => ({ nama: log.approverName || log.approverRole, waktu: log.actedAt ? new Date(log.actedAt).toLocaleString('id-ID') : '-', statusBadge: log.action, catatan: log.note || '-' })),
+    riwayatLog: [
+      ...submissionLog,
+      ...logs.filter(log => String(log.action).toUpperCase() !== 'PENDING').map(log => ({
+        nama: log.approverName || log.approverRole,
+        waktu: logDateText(log.actedAt),
+        statusBadge: logStatusLabel(log.action),
+        catatan: log.note || '-',
+      })),
+    ],
   };
 }
 
 export const getPendingApprovals = async () => (await api.get('/api/cuti/approvals/my-task')).map(mapApproval);
 export const getApprovalHistory = async () => (await api.get('/api/cuti/approvals/history')).map(mapApproval);
+export const getApprovalDetail = async (id) => mapApproval(await api.get(`/api/cuti/approvals/${id}`));
 export const takeApprovalAction = (id, action, note) => api.put(`/api/cuti/${id}/${action}`, { note });
