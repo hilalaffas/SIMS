@@ -35,9 +35,15 @@ public class UserController {
         this.activityLogService = activityLogService;
     }
 
+    // Helper untuk konsistensi data log
     private Long getCurrentUserId(Authentication authentication) {
+        if (authentication == null) return null;
         User user = userRepository.findByUsername(authentication.getName());
         return user != null ? user.getUserId() : null;
+    }
+
+    private String getUsername(Authentication authentication) {
+        return authentication != null ? authentication.getName() : "System";
     }
 
     @GetMapping("/me")
@@ -53,11 +59,6 @@ public class UserController {
                 user.getEmail(),
                 user.getRoleId().getRoleName()
         );
-
-        // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_USERS", "users", null, "Melihat data user", httpRequest);
-
-
         
         return ResponseEntity.ok(response);
     }
@@ -74,9 +75,6 @@ public class UserController {
                 ))
                 .collect(Collectors.toList());
 
-        // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_ALL_USERS", "users", null, "Melihat semua data user", httpRequest);
-
         return ResponseEntity.ok(response);
     }
 
@@ -89,9 +87,8 @@ public class UserController {
 
         User user = userRepository.findById(id).orElse(null);
         if (user == null) {
-
             activityLogService.log(
-                    authentication.getName(),
+                    getUsername(authentication),
                     getCurrentUserId(authentication),
                     "UPDATE_USER_FAILED",
                     "users",
@@ -108,9 +105,8 @@ public class UserController {
             User existing = userRepository.findByUsername(request.getUsername());
 
             if (existing != null) {
-
                 activityLogService.log(
-                        authentication.getName(),
+                        getUsername(authentication),
                         getCurrentUserId(authentication),
                         "UPDATE_USER_FAILED",
                         "users",
@@ -129,13 +125,11 @@ public class UserController {
         }
 
         if (request.getIdRole() != null) {
-
             Roles role = rolesRepository.findById(request.getIdRole()).orElse(null);
 
             if (role == null) {
-
                 activityLogService.log(
-                        authentication.getName(),
+                        getUsername(authentication),
                         getCurrentUserId(authentication),
                         "UPDATE_USER_FAILED",
                         "users",
@@ -157,7 +151,7 @@ public class UserController {
         userRepository.save(user);
 
         activityLogService.log(
-                authentication.getName(),
+                getUsername(authentication),
                 getCurrentUserId(authentication),
                 "UPDATE_USER",
                 "users",
@@ -184,7 +178,8 @@ public class UserController {
         userRepository.deleteById(id);
 
         // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "DELETE_USER", "users", id, "Berhasil hapus user: " + user.getUsername(), httpRequest);
+        activityLogService.log(getUsername(authentication), getCurrentUserId(authentication), 
+            "DELETE_USER", "users", id, "Berhasil hapus user: " + user.getUsername(), httpRequest);
 
         return ResponseEntity.ok("User berhasil dihapus");
     }

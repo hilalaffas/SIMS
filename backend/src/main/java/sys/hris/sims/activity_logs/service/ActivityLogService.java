@@ -8,6 +8,9 @@ import sys.hris.sims.activity_logs.repository.ActivityLogRepository;
 
 import java.util.List;
 
+import org.springframework.scheduling.annotation.Scheduled;
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class ActivityLogService {
@@ -36,5 +39,17 @@ public class ActivityLogService {
 
     public List<ActivityLog> getLogsByUser(Long userId) {
         return activityLogRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    // Cron: 0 0 0 1 * * artinya setiap jam 00:00:00 di tanggal 1 setiap bulan
+    @Scheduled(cron = "0 0 0 1 * *")
+    public void cleanupOldLogs() {
+        // Hitung waktu 1 bulan yang lalu
+        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+        
+        // Hapus data
+        activityLogRepository.deleteLogsOlderThan(oneMonthAgo);
+        
+        System.out.println("Log lama telah dibersihkan pada: " + LocalDateTime.now());
     }
 }

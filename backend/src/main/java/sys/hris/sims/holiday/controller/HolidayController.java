@@ -22,16 +22,21 @@ public class HolidayController {
     private final ActivityLogService activityLogService;
     private final UserRepository userRepository;
 
+    // Helper untuk konsistensi ID User
     private Long getCurrentUserId(Authentication authentication) {
+        if (authentication == null) return null;
         User user = userRepository.findByUsername(authentication.getName());
         return user != null ? user.getUserId() : null;
     }
 
+    // Helper untuk konsistensi Username
+    private String getUsername(Authentication authentication) {
+        return authentication != null ? authentication.getName() : "System";
+    }
+
     // GET semua hari libur
     @GetMapping
-    public ResponseEntity<?> getAllHolidays(Authentication authentication, HttpServletRequest httpRequest) {
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication),
-                "GET_ALL_HOLIDAYS", "holidays", null, "Melihat semua hari libur", httpRequest);
+    public ResponseEntity<?> getAllHolidays() {
         return ResponseEntity.ok(holidayService.getAllHolidays());
     }
 
@@ -39,12 +44,8 @@ public class HolidayController {
     @GetMapping("/month")
     public ResponseEntity<?> getByMonth(
             @RequestParam int year,
-            @RequestParam int month,
-            Authentication authentication,
-            HttpServletRequest httpRequest) {
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication),
-                "GET_HOLIDAYS_BY_MONTH", "holidays", null,
-                "Melihat hari libur bulan " + month + "/" + year, httpRequest);
+            @RequestParam int month) {
+
         return ResponseEntity.ok(holidayService.getHolidaysByMonth(year, month));
     }
 
@@ -52,15 +53,16 @@ public class HolidayController {
     @GetMapping("/range")
     public ResponseEntity<?> getByRange(
             @RequestParam LocalDate start,
-            @RequestParam LocalDate end,
-            Authentication authentication,
-            HttpServletRequest httpRequest) {
+            @RequestParam LocalDate end) {
+
         return ResponseEntity.ok(holidayService.getHolidaysByRange(start, end));
     }
 
     // GET cek apakah tanggal tertentu hari libur
     @GetMapping("/check")
-    public ResponseEntity<?> checkHoliday(@RequestParam LocalDate date) {
+    public ResponseEntity<?> checkHoliday(
+            @RequestParam LocalDate date) {
+        
         boolean isHoliday = holidayService.isHoliday(date);
         return ResponseEntity.ok(isHoliday);
     }
@@ -73,9 +75,10 @@ public class HolidayController {
             HttpServletRequest httpRequest) {
         Long userId = getCurrentUserId(authentication);
         var saved = holidayService.createHoliday(request, userId);
-        activityLogService.log(authentication.getName(), userId,
+        
+        activityLogService.log(getUsername(authentication), userId,
                 "CREATE_HOLIDAY", "holidays", saved.getHolidayId(),
-                "Menambah hari libur: " + saved.getName() + " (" + saved.getDate() + ")", httpRequest);
+                "Menambah hari libur: " + saved.getName(), httpRequest);
         return ResponseEntity.ok(saved);
     }
 
@@ -87,9 +90,10 @@ public class HolidayController {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         var updated = holidayService.updateHoliday(id, request);
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication),
+        
+        activityLogService.log(getUsername(authentication), getCurrentUserId(authentication),
                 "UPDATE_HOLIDAY", "holidays", id,
-                "Mengupdate hari libur id: " + id, httpRequest);
+                "Mengupdate hari libur: " + updated.getName(), httpRequest);
         return ResponseEntity.ok(updated);
     }
 
@@ -99,10 +103,12 @@ public class HolidayController {
             @PathVariable Long id,
             Authentication authentication,
             HttpServletRequest httpRequest) {
+        
         holidayService.deleteHoliday(id);
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication),
+        
+        activityLogService.log(getUsername(authentication), getCurrentUserId(authentication),
                 "DELETE_HOLIDAY", "holidays", id,
-                "Menghapus hari libur id: " + id, httpRequest);
+                "Menghapus hari libur dengan ID: " + id, httpRequest);
         return ResponseEntity.ok("Hari libur berhasil dihapus");
     }
 }

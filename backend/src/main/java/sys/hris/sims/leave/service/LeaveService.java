@@ -93,6 +93,22 @@ public class LeaveService {
             throw new RuntimeException("Karyawan pemohon wajib diisi");
         }
 
+         // ==== VALIDASI OVERLAP TANGGAL CUTI ====
+        List<LeaveRequest> existingCuti = cutiRepository.findByEmployee_EmployeeIdAndStatus_StatusNameIn(
+                requester.getEmployeeId(),
+                List.of(ACTION_PENDING, ACTION_APPROVED)
+        );
+
+        boolean isOverlap = existingCuti.stream().anyMatch(existing ->
+                !cuti.getStartDate().isAfter(existing.getEndDate()) &&
+                !cuti.getEndDate().isBefore(existing.getStartDate())
+        );
+
+        if (isOverlap) {
+            throw new RuntimeException("Kamu sudah memiliki pengajuan cuti pada rentang tanggal yang bentrok");
+        }
+        // ==== END VALIDASI ====
+
         int totalDays = calculateWorkingDays(cuti.getStartDate(), cuti.getEndDate());
         if (totalDays <= 0) {
             throw new RuntimeException("Rentang cuti harus memiliki minimal satu hari kerja");

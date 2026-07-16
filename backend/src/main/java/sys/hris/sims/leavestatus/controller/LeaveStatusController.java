@@ -23,20 +23,21 @@ public class LeaveStatusController {
 
     private final LeaveStatusService statusCutiService;
     private final ActivityLogService activityLogService;
-
     private final UserRepository userRepository;
 
-    // helper method ambil userId dari token
+    // Helper untuk konsistensi data log
     private Long getCurrentUserId(Authentication authentication) {
+        if (authentication == null) return null;
         User user = userRepository.findByUsername(authentication.getName());
         return user != null ? user.getUserId() : null;
     }
 
+    private String getUsername(Authentication authentication) {
+        return authentication != null ? authentication.getName() : "System";
+    }
+
     @GetMapping
     public ResponseEntity<List<LeaveStatus>> getAllStatusCuti(Authentication authentication, HttpServletRequest httpRequest) {
-
-        // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_ALL_STATUS_CUTI", "leave_statuses", null, "Melihat semua status cuti", httpRequest);
 
         return ResponseEntity.ok(statusCutiService.getAllStatusCuti());
     }
@@ -44,10 +45,7 @@ public class LeaveStatusController {
     @GetMapping("/{id}")
     public ResponseEntity<LeaveStatus> getStatusCutiById(@PathVariable Long id, Authentication authentication, HttpServletRequest httpRequest) {
 
-        // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_STATUS_CUTI", "leave_statuses", id, "Melihat detail jenis cuti id: " + id, httpRequest);
-
-        return ResponseEntity.ok(statusCutiService.getStatusCutiById(id));
+               return ResponseEntity.ok(statusCutiService.getStatusCutiById(id));
     }
 
     @PostMapping
@@ -55,9 +53,11 @@ public class LeaveStatusController {
 
         // catat activity log
         LeaveStatus saved = statusCutiService.createStatusCuti(statusCuti);
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "CREATE_STATUS_CUTI", "leave_statuses", saved.getStatusId(), "Menambah status cuti: " + saved.getStatusName(), httpRequest);
+        activityLogService.log(getUsername(authentication), getCurrentUserId(authentication), 
+            "CREATE_STATUS_CUTI", "leave_statuses", saved.getStatusId(), 
+            "Menambah status cuti: " + saved.getStatusName(), httpRequest);
         
-        return ResponseEntity.ok(statusCutiService.createStatusCuti(statusCuti));
+        return ResponseEntity.ok(saved);
     }
 
     @PutMapping("/{id}")
@@ -65,7 +65,8 @@ public class LeaveStatusController {
 
         // catat activity log
         LeaveStatus updated = statusCutiService.updateStatusCuti(id, statusCuti);
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "UPDATE_STATUS_CUTI", "leave_statuses", id,"Mengupdate status cuti id: " + id, httpRequest);
+        activityLogService.log(getUsername(authentication), getCurrentUserId(authentication), 
+            "UPDATE_STATUS_CUTI", "leave_statuses", id,"Mengupdate status cuti id: " + id, httpRequest);
 
         return ResponseEntity.ok(updated);
     }
@@ -75,7 +76,8 @@ public class LeaveStatusController {
 
         // catat activity log
         statusCutiService.deleteStatusCuti(id);
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "DELETE_STATUS_CUTI", "leave_statuses", id, "Menghapus status cuti id: " + id, httpRequest);
+        activityLogService.log(getUsername(authentication), getCurrentUserId(authentication), 
+            "DELETE_STATUS_CUTI", "leave_statuses", id, "Menghapus status cuti id: " + id, httpRequest);
 
         return ResponseEntity.ok("Status cuti berhasil dihapus");
     }

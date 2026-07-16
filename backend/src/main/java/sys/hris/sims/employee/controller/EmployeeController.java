@@ -50,10 +50,6 @@ public class EmployeeController {
     // GET semua karyawan
     @GetMapping
     public ResponseEntity<List<Employee>> getAllKaryawan(Authentication authentication, HttpServletRequest httpRequest) {
-
-        // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_ALL_KARYAWAN", "employees", null, "Melihat semua data karyawan", httpRequest);
-
         return ResponseEntity.ok(karyawanService.getAllKaryawan());
     }
 
@@ -63,8 +59,6 @@ public class EmployeeController {
             @RequestParam String role,
             Authentication authentication,
             HttpServletRequest httpRequest) {
-
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_APPROVERS", "employees", null, "Melihat daftar approver role: " + role, httpRequest);
 
         List<Map<String, Object>> response = karyawanService.getApproversByRole(role).stream()
                 .map(employee -> Map.<String, Object>of(
@@ -80,9 +74,6 @@ public class EmployeeController {
     // GET karyawan by ID
     @GetMapping("/{id}")
     public ResponseEntity<Employee> getKaryawanById(@PathVariable Long id, Authentication authentication, HttpServletRequest httpRequest) {
-
-        // catat activity log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_KARYAWAN", "employees", id, "Melihat detail karyawan id: " + id, httpRequest);
         return ResponseEntity.ok(karyawanService.getKaryawanById(id));
     }
 
@@ -180,8 +171,15 @@ public class EmployeeController {
         Employee updated = karyawanService.updateKaryawan(id, employee);
         
         // Catat Log
-        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "UPDATE_KARYAWAN", "employees", id, "Mengupdate karyawan id: " + id, httpRequest);
-        
+        activityLogService.log(
+            authentication.getName(), 
+            getCurrentUserId(authentication), 
+            "UPDATE_KARYAWAN", 
+            "employees", 
+            id, 
+            "Mengupdate karyawan id: " + id + " (Status aktif: " + updated.getIsActive() + ")", 
+            httpRequest
+        );
         return ResponseEntity.ok(updated);
     }
 

@@ -91,6 +91,8 @@ public class SecurityConfig {
                         // ==========================
                         .requestMatchers("/test", "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/register").hasAnyRole(ADMIN_ROLES)
+                        .requestMatchers("/api/roles").hasAnyRole(ADMIN_ROLES)
+                        .requestMatchers("/api/emergency-contact-relationships").hasAnyRole(ADMIN_ROLES)
 
                         // ==========================
                         // PASSWORD RESET
@@ -249,7 +251,7 @@ public class SecurityConfig {
                         // ACTIVITY LOG
                         // ==========================
                         .requestMatchers("/api/admin/**")
-                        .hasAnyRole("ADMIN", "HRD_ADMIN", "SUPER_ADMIN")
+                        .hasAnyRole(ADMIN_ROLES)
 
                         // ==========================
                         // Holiday

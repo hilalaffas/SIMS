@@ -1,10 +1,10 @@
 package sys.hris.sims.leave.dto;
 
-import java.time.LocalDate;
-import java.util.List;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
+
+import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @AllArgsConstructor

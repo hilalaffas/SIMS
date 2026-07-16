@@ -84,6 +84,11 @@ public class AuthController {
                                       HttpServletRequest httpRequest) {
         User existing = userRepository.findByUsername(request.getUsername());
         if (existing != null) {
+            // activity log
+            activityLogService.log(authentication != null ? authentication.getName() : "System",
+                authentication != null ? getCurrentUserId(authentication) : null,
+                "REGISTER_FAILED", "users", null, "Gagal register: Username sudah dipakai (" + request.getUsername() + ")", httpRequest);
+
             return ResponseEntity.status(400).body("Username already in use");
         }
 
@@ -93,6 +98,11 @@ public class AuthController {
 
         Roles role = roleRepository.findById(request.getRoleId()).orElse(null);
         if (role == null) {
+            // activity log
+            activityLogService.log(authentication != null ? authentication.getName() : "System",
+                authentication != null ? getCurrentUserId(authentication) : null,
+                "REGISTER_FAILED", "roles", request.getRoleId(), "Gagal register: Role tidak ditemukan", httpRequest);
+
             return ResponseEntity.status(400).body("Role not found");
         }
 
@@ -198,6 +208,23 @@ public class AuthController {
             return ResponseEntity.status(401).body("Invalid username or password");
         }
 
+        Employee employee = employeeRepository.findByUser(user).orElse(null);
+
+        if (employee != null && !employee.getIsActive()) {
+            activityLogService.log(
+                    user.getUsername(),
+                    user.getUserId(),
+                    "LOGIN_BLOCKED",
+                    "employees",
+                    employee.getEmployeeId(),
+                    "Login ditolak: Karyawan sudah diberhentikan (Status: Non-Aktif)",
+                    httpRequest
+            );
+
+            return ResponseEntity.status(403)
+                    .body("Akun tidak dapat diakses karena status karyawan sudah tidak aktif.");
+        }
+
         if (!user.getIsActive()) {
 
             activityLogService.log(
@@ -267,7 +294,21 @@ public class AuthController {
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(
             @RequestBody ChangePasswordRequest request,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        // Panggil service
+        authService.changePassword(authentication, request);
+
+        // Catat log sukses
+        activityLogService.log(
+                authentication.getName(),
+                getCurrentUserId(authentication),
+                "CHANGE_PASSWORD",
+                "users",
+                getCurrentUserId(authentication),
+                "Berhasil mengubah password",
+                httpRequest
+        );
 
         return ResponseEntity.ok(
                 authService.changePassword(authentication, request));
