@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom'; // [BARU] baca query param dari notifikasi reset sandi
 import './Karyawan.css';
 import HeadlineKaryawan from './components/HeadlineKaryawan';
 import TabMenuKaryawan from './components/TabMenuKaryawan';
@@ -52,6 +53,14 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null); 
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // [BARU] Dipakai saat halaman ini dibuka dari notifikasi lonceng "Permintaan
+  // Reset Sandi" di Navbar (URL: /karyawan?employeeId=X&resetRequestId=Y).
+  // pendingResetRequestId diteruskan ke ModalDetailKaryawan supaya saat HR
+  // menyimpan password baru, backend otomatis menandai permintaan reset itu
+  // selesai (lihat ModalDetailKaryawan.jsx & backend UserController).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [pendingResetRequestId, setPendingResetRequestId] = useState(null);
+
   const currentUserRole = user?.role?.toLowerCase(); // [BARU] Untuk dikirim ke komponen child
   const canDelete = isSuperAdmin(user);
   const canManageRole = isHrAdmin(user) || isSuperAdmin(user);
@@ -68,7 +77,12 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
   // [UBAH] Fungsi handler disesuaikan dengan pemisahan state
   const handleToggleAdd = () => setShowAddForm(!showAddForm);
   const handleOpenEdit = (item) => setEditTarget(item);
-  const handleCloseEdit = () => setEditTarget(null);
+  // [UBAH] Ikut bersihkan pendingResetRequestId supaya tidak "nempel" ke
+  // karyawan lain yang dibuka manual (bukan lewat notifikasi) setelahnya.
+  const handleCloseEdit = () => {
+    setEditTarget(null);
+    setPendingResetRequestId(null);
+  };
 
   const fetchKaryawan = async () => {
     try {
@@ -112,6 +126,28 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
     fetchKaryawan();
   }, []);
 
+  // [BARU] Auto-buka modal edit karyawan kalau halaman ini diakses dari
+  // notifikasi reset sandi (query param employeeId & resetRequestId).
+  // Menunggu karyawanList terisi dulu supaya pencariannya tidak sia-sia.
+  useEffect(() => {
+    const employeeIdParam = searchParams.get('employeeId');
+    if (!employeeIdParam || karyawanList.length === 0) return;
+
+    const target = karyawanList.find(
+      (k) => String(k.employeeId ?? k.id) === String(employeeIdParam)
+    );
+
+    if (target) {
+      setEditTarget(target);
+      setPendingResetRequestId(searchParams.get('resetRequestId') || null);
+    }
+
+    // Bersihkan query param dari URL supaya tidak auto-buka lagi kalau modal
+    // ditutup lalu halaman ini refetch/re-render (mis. setelah save).
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [karyawanList]);
+
   // [BARU] Efek ini hanya akan memanggil API Log jika tab Log Sistem diklik
   useEffect(() => {
     if (activeTab === 'Log Sistem') {
@@ -143,6 +179,7 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
       await fetchKaryawan();
       addLogActivity(user?.name || 'Admin HR', `mengupdate profil "${formData.namaLengkap}".`);
       setEditTarget(null);
+      setPendingResetRequestId(null); // [BARU]
     } catch (error) {
       console.error("Gagal me-refresh daftar karyawan:", error);
     }
@@ -284,6 +321,7 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
           onClose={handleCloseEdit}
           onSave={handleSubmitEditModal}
           onDelete={() => handleRequestDelete(editTarget)}
+          resetRequestId={pendingResetRequestId}
         />
       )}
 

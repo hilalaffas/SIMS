@@ -1,16 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getRiwayatByUser } from '../services/CutiService'; // TAMBAHAN: Mengambil fungsi hit database service yang sama dengan ApplyCuti
+// [BARU] Untuk notifikasi permintaan reset sandi (lonceng HR Admin/Super Admin)
+import { getPendingResetRequests, getPendingResetCount } from '../services/passwordResetService';
+import { isHrAdmin, isSuperAdmin } from '../utils/roles';
+import NotifPasswordResetModal from './NotifPasswordResetModal';
 import './Navbar.css'; 
 
 // Tambahkan parameter object user untuk mengambil id data dari database/API
 export default function Navbar({ toggleSidebar, user }) {
   const location = useLocation();
+  const navigate = useNavigate(); // [BARU] untuk redirect ke /karyawan saat notif reset diproses
   const [currentDate, setCurrentDate] = useState('');
   
   // === BAGIAN TAMBAHAN NOTIFIKASI REAL-TIME DARI DATABASE (START) ===
   const [showDropdown, setShowDropdown] = useState(false);
   const [notifications, setNotifications] = useState([]);
+
+  // [BARU] Notifikasi permintaan reset sandi -- terpisah dari notifikasi cuti
+  // di atas karena sumber datanya beda (tabel password_reset_requests, bukan
+  // riwayat cuti) dan hanya relevan untuk HR Admin / Super Admin.
+  const [resetRequests, setResetRequests] = useState([]);
+  const [selectedResetNotif, setSelectedResetNotif] = useState(null);
+  const canSeeResetNotif = isHrAdmin(user) || isSuperAdmin(user);
 
   // State tambahan untuk mendeteksi layar handphone (mobile)
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -82,6 +94,69 @@ export default function Navbar({ toggleSidebar, user }) {
   }, [userId, userRole, showDropdown]); // Berjalan otomatis setiap kali id user berubah atau dropdown dibuka
   // === BAGIAN TAMBAHAN NOTIFIKASI REAL-TIME DARI DATABASE (END) ===
 
+  // === [BARU] NOTIFIKASI PERMINTAAN RESET SANDI (HR ADMIN / SUPER ADMIN) ===
+  useEffect(() => {
+    if (!canSeeResetNotif) return;
+
+    let isMounted = true;
+
+    const fetchResetRequests = async () => {
+      try {
+        const data = await getPendingResetRequests();
+        if (isMounted) setResetRequests(data || []);
+      } catch (error) {
+        console.error('Gagal memuat notifikasi permintaan reset sandi:', error);
+      }
+    };
+
+    fetchResetRequests();
+    // Polling ringan tiap 30 detik supaya badge lonceng ikut update tanpa
+    // HR harus buka-tutup dropdown-nya sendiri.
+    const intervalId = setInterval(fetchResetRequests, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [canSeeResetNotif]);
+
+  // Notifikasi reset sandi diubah ke bentuk yang sama dengan `notifications`
+  // (cuti) supaya bisa dirender dalam satu daftar & satu badge jumlah.
+  const resetNotifications = resetRequests.map((req) => ({
+    id: `reset-${req.id}`,
+    text: (
+      <>
+        Karyawan <strong>{req.employeeName || req.username}</strong> meminta{' '}
+        <strong>reset sandi.</strong>
+      </>
+    ),
+    date: req.requestedAt
+      ? new Date(req.requestedAt).toLocaleDateString('id-ID', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        })
+      : '-',
+    type: 'password-reset',
+    raw: req,
+  }));
+
+  const allNotifications = [...resetNotifications, ...notifications];
+
+  const handleNotifClick = (notif) => {
+    if (notif.type === 'password-reset') {
+      setSelectedResetNotif(notif.raw);
+    }
+  };
+
+  const handleProcessReset = (request) => {
+    setSelectedResetNotif(null);
+    setShowDropdown(false);
+    // Arahkan ke halaman Karyawan sambil bawa employeeId & resetRequestId
+    // lewat query string -- Karyawan.jsx yang akan otomatis membuka modal
+    // edit untuk karyawan bersangkutan (lihat Karyawan.jsx).
+    navigate(`/karyawan?employeeId=${request.employeeId}&resetRequestId=${request.id}`);
+  };
+  // === [BARU] AKHIR BAGIAN NOTIFIKASI RESET SANDI ===
+
   // Effect untuk meng-update tanggal secara otomatis dalam format Indonesia & Deteksi ukuran layar
   useEffect(() => {
     const formatIndonesiaDate = () => {
@@ -148,8 +223,8 @@ export default function Navbar({ toggleSidebar, user }) {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
               <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
             </svg>
-            {notifications.length > 0 && (
-              <span className="notification-badge">{notifications.length}</span>
+            {allNotifications.length > 0 && (
+              <span className="notification-badge">{allNotifications.length}</span>
             )}
           </button>
 
@@ -161,11 +236,16 @@ export default function Navbar({ toggleSidebar, user }) {
                 <button className="btn-mark-read" onClick={() => setNotifications([])}>Tandai dibaca</button>
               </div>
               <ul className="notification-list">
-                {notifications.length === 0 ? (
+                {allNotifications.length === 0 ? (
                   <li className="notification-empty">Tidak ada notifikasi baru</li>
                 ) : (
-                  notifications.map(notif => (
-                    <li key={notif.id} className="notification-item">
+                  allNotifications.map(notif => (
+                    <li
+                      key={notif.id}
+                      className="notification-item"
+                      onClick={() => handleNotifClick(notif)}
+                      style={notif.type === 'password-reset' ? { cursor: 'pointer' } : undefined}
+                    >
                       <div className="notification-icon-wrapper">
                         {notif.type === 'returned' && (
                           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-returned">
@@ -185,11 +265,22 @@ export default function Navbar({ toggleSidebar, user }) {
                             <circle cx="12" cy="12" r="4" fill="#3b82f6"/>
                           </svg>
                         )}
+                        {/* [BARU] Ikon khusus notifikasi permintaan reset sandi */}
+                        {notif.type === 'password-reset' && (
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-password-reset">
+                            <circle cx="12" cy="12" r="10" stroke="#8b5cf6" strokeWidth="2" fill="none"/>
+                            <circle cx="9" cy="12" r="2.2" stroke="#8b5cf6" strokeWidth="1.8" fill="none"/>
+                            <path d="M11 12h5m0 0v2m0-2v-2" stroke="#8b5cf6" strokeWidth="1.8" strokeLinecap="round"/>
+                          </svg>
+                        )}
                       </div>
 
                       <div className="notification-content">
                         <p className="notification-text">{notif.text}</p>
                         <span className="notification-time">{notif.date}</span>
+                        {notif.type === 'password-reset' && (
+                          <span className="notification-action-hint">Klik untuk memproses →</span>
+                        )}
                       </div>
                     </li>
                   ))
@@ -200,6 +291,13 @@ export default function Navbar({ toggleSidebar, user }) {
         </div>
 
       </div>
+
+      {/* [BARU] Modal detail notifikasi permintaan reset sandi */}
+      <NotifPasswordResetModal
+        request={selectedResetNotif}
+        onClose={() => setSelectedResetNotif(null)}
+        onProcess={handleProcessReset}
+      />
     </header>
   );
 }

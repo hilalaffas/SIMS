@@ -109,6 +109,18 @@
   gap: 24px;
 }
 
+/* [BARU] Banner saat modal dibuka dari notifikasi Permintaan Reset Sandi */
+.reset-request-banner_detail_karyawan {
+  background-color: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #5b21b6;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: -8px 0 0;
+}
+
 .section-container_detail_karyawan {
   display: flex;
   flex-direction: column;

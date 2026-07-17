@@ -49,32 +49,9 @@ export const getCurrentUser = () => {
   }
 };
 
-/**
- * BELUM TERSAMBUNG KE BACKEND SUNGGUHAN.
- * Endpoint POST /api/password-reset/forgot-password sudah ada di SecurityConfig
- * (permitAll), tapi bentuk request/response DTO-nya belum saya lihat, jadi
- * fungsi ini masih mock supaya alur "Lupa Password" di UI tidak error.
- * Kabari kalau mau saya sambungkan ke endpoint aslinya.
- */
-export const checkUsernameExists = async (identifier) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(!!identifier);
-    }, 300);
-  });
-};
-
-export const requestPasswordReset = async (identifier) => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (!identifier || !identifier.trim()) {
-        reject(new Error('Email atau username wajib diisi.'));
-        return;
-      }
-      resolve({
-        success: true,
-        message: 'Jika akun terdaftar, instruksi reset password telah dikirim.',
-      });
-    }, 500);
-  });
-};
+// [UBAH] checkUsernameExists & requestPasswordReset (yang sebelumnya mock
+// pakai setTimeout di sini) sudah DIHAPUS. Alur "Lupa Sandi" sekarang
+// langsung hit endpoint asli lewat submitForgotPassword() di
+// services/passwordResetService.js, dipakai dari ForgotPassword.jsx.
+// Backend (bukan frontend) yang memvalidasi apakah username ada atau tidak,
+// jadi tidak perlu lagi ada langkah "check" terpisah sebelum submit.

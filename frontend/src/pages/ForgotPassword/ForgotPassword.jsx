@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
-import { checkUsernameExists, requestPasswordReset } from '../../services/authService';
+import { submitForgotPassword } from '../../services/passwordResetService';
 
 const TOAST_DURATION = 3000;
 
@@ -21,8 +21,12 @@ const ForgotPassword = () => {
     }, TOAST_DURATION);
   };
 
-  // Step 1: validasi username sebelum menampilkan konfirmasi
-  const handleSubmit = async (e) => {
+  // [UBAH] Step 1: dulu ada panggilan checkUsernameExists (mock) di sini
+  // sebelum menampilkan dialog konfirmasi. Backend tidak punya endpoint
+  // pengecekan username terpisah, jadi langkah ini cukup validasi kosong
+  // saja -- validasi "username ada atau tidak" tetap dilakukan backend saat
+  // submit sungguhan di handleConfirmReset (Step 2).
+  const handleSubmit = (e) => {
     e.preventDefault();
 
     if (!identifier.trim()) {
@@ -30,27 +34,18 @@ const ForgotPassword = () => {
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const exists = await checkUsernameExists(identifier);
-      if (!exists) {
-        showErrorToast('Username tidak ditemukan di database.');
-        return;
-      }
-      setShowConfirm(true);
-    } catch (err) {
-      showErrorToast(err.message || 'Terjadi kesalahan. Silakan coba lagi.');
-    } finally {
-      setIsLoading(false);
-    }
+    setShowConfirm(true);
   };
 
-  // Step 2: setelah dikonfirmasi, kirim permintaan reset sesungguhnya
+  // [UBAH] Step 2: sekarang benar-benar mengirim ke backend lewat
+  // submitForgotPassword (POST /api/password-reset/forgot-password).
+  // Kalau username tidak ditemukan, backend melempar error yang pesannya
+  // ditangkap & ditampilkan lewat toast (lihat authService.js/api.js).
   const handleConfirmReset = async () => {
     setShowConfirm(false);
     setIsLoading(true);
     try {
-      await requestPasswordReset(identifier);
+      await submitForgotPassword(identifier.trim());
       setIsSubmitted(true);
     } catch (err) {
       showErrorToast(err.message || 'Terjadi kesalahan. Silakan coba lagi.');

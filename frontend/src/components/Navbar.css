@@ -251,6 +251,13 @@
   font-weight: 500;
 }
 
+/* [BARU] Hint kecil khusus notifikasi permintaan reset sandi */
+.notification-action-hint {
+  font-size: 0.78rem;
+  color: #8b5cf6;
+  font-weight: 600;
+}
+
 .notification-empty {
   padding: 2rem 1.5rem;
   font-size: 0.9rem;

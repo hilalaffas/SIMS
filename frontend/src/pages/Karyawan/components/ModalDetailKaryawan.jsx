@@ -7,7 +7,7 @@ import { getAllDivisi } from '../../../services/divisiService';
 import { getAllRelationships } from '../../../services/relationshipService';
 import { getAllRoles } from '../../../services/roleService';
 
-const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUserRole, onSave, onDelete }) => {
+const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUserRole, onSave, onDelete, resetRequestId = null }) => {
   // isOpen diberi default `true` karena Karyawan.jsx (parent) memanggil modal ini
   // secara conditional lewat `{editTarget && (<ModalDetailKaryawan ... />)}` dan
   // TIDAK pernah mengirim prop isOpen. Tanpa default ini, isOpen selalu undefined
@@ -173,6 +173,14 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
     // supaya tidak menimpa password lama dengan string kosong.
     if (formData.password && formData.password.trim() !== '') {
       userPayload.password = formData.password;
+
+      // [BARU] Kalau modal ini dibuka dari notifikasi "Permintaan Reset
+      // Sandi" (lihat Karyawan.jsx), sertakan id permintaannya supaya
+      // backend otomatis menandainya APPROVED dalam request yang sama --
+      // HR tidak perlu buka form approve terpisah.
+      if (resetRequestId) {
+        userPayload.passwordResetRequestId = resetRequestId;
+      }
     }
 
     setIsSubmitting(true);
@@ -198,7 +206,11 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
       return;
     }
 
-    setNotification(`Data profil akun ${formData.namaLengkap} berhasil diperbarui.`);
+    setNotification(
+      resetRequestId && userPayload.password
+        ? `Data profil akun ${formData.namaLengkap} berhasil diperbarui. Permintaan reset sandi juga sudah ditandai selesai.`
+        : `Data profil akun ${formData.namaLengkap} berhasil diperbarui.`
+    );
     setFormData((prev) => ({ ...prev, password: '' }));
     if (onSave) onSave(formData);
     setTimeout(() => {
@@ -236,6 +248,15 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
         </div>
 
         <div className="modal-body_detail_karyawan">
+
+          {/* [BARU] Banner info kalau modal dibuka dari notifikasi reset sandi */}
+          {resetRequestId && (
+            <div className="reset-request-banner_detail_karyawan">
+              🔑 Karyawan ini mengajukan <strong>Permintaan Reset Sandi</strong>. Isi field
+              &quot;Ubah Password&quot; di bawah dengan sandi baru, lalu klik <strong>Simpan Perubahan Data</strong>{' '}
+              untuk sekaligus menyelesaikan permintaannya.
+            </div>
+          )}
           
           <div className="section-container_detail_karyawan">
             <h3 className="section-title_detail_karyawan">Informasi Umum</h3>
