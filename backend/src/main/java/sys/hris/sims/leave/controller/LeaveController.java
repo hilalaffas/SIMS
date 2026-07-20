@@ -115,6 +115,20 @@ public class LeaveController {
         return ResponseEntity.ok(saved);
     }
 
+    // [BARU] POST cuti darurat/susulan oleh HR Admin/Super Admin, atas nama
+    // karyawan lain — otomatis langsung ter-ACC (BR-07, FR-029, UC-15).
+    // Akses endpoint ini sudah dibatasi role HRD_ADMIN & SUPER_ADMIN di
+    // SecurityConfig (POST /api/cuti/urgent).
+    @PostMapping("/urgent")
+    public ResponseEntity<LeaveRequest> createUrgentCuti(@RequestBody LeaveRequest cuti, Authentication authentication, HttpServletRequest httpRequest) {
+
+        LeaveRequest saved = cutiService.createUrgentCuti(cuti, authentication.getName());
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "CREATE_URGENT_CUTI", "leave_requests", saved.getLeaveRequestId(),
+                "Menginput cuti susulan (auto-ACC) untuk " + saved.getEmployee().getFullName(), httpRequest);
+
+        return ResponseEntity.ok(saved);
+    }
+
     @PutMapping("/{id}/resubmit")
     public ResponseEntity<LeaveRequest> resubmitCuti(
             @PathVariable Long id,

@@ -29,6 +29,25 @@ export async function submitCuti(payload) {
   return api.post('/api/cuti', body);
 }
 
+// [BARU] Cuti Susulan/Darurat oleh HR Admin/Super Admin atas nama karyawan.
+// Backend (LeaveService.createUrgentCuti) otomatis set status APPROVED,
+// endpoint ini juga sudah dibatasi role HRD_ADMIN/SUPER_ADMIN di SecurityConfig.
+export async function submitUrgentCuti(payload) {
+  const body = {
+    employee: { employeeId: Number(payload.karyawanId) },
+    leaveType: { leaveTypeId: Number(payload.leaveTypeId) },
+    startDate: payload.startDate,
+    endDate: payload.endDate,
+    reason: payload.alasan,
+    pendingWork: payload.pekerjaanTertunda,
+    coveredBy: payload.dicoverOleh,
+    leaderEmployeeId: payload.leaderEmployeeId || null,
+    spvEmployeeId: payload.spvEmployeeId || null,
+    managerEmployeeId: payload.managerEmployeeId || null,
+  };
+  return api.post('/api/cuti/urgent', body);
+}
+
 export const resubmitCuti = (id, payload) => api.put(`/api/cuti/${id}/resubmit`, {
   leaveType: { leaveTypeId: Number(payload.leaveTypeId) },
   startDate: payload.dariTanggal,
@@ -112,6 +131,41 @@ export function mapApproval(item) {
       })),
     ],
   };
+}
+
+// [BARU] Dipakai tab "Cuti Karyawan" di halaman Manajemen Karyawan (HR/Super
+// Admin) — menggantikan data dummy allLeaveHistory. Bentuk hasil mapping
+// disamakan dengan mapApproval() supaya kompatibel dengan LeaveListHr.jsx &
+// modal rincian (Form.jsx) yang sudah ada.
+// Catatan: approvalChain (nama Leader/SPV/Manager) belum tersedia dari
+// endpoint GET /api/cuti (data itu ada di tabel leave_request_approvals,
+// baru diekspos lewat /api/cuti/approvals/* untuk approver) — ditampilkan
+// '-' untuk sementara.
+export function mapKaryawanLeave(item) {
+  const status = item.status?.statusName || item.status || 'PENDING';
+  const hasBeenReviewed = String(status).toUpperCase() !== 'PENDING';
+
+  return {
+    id: item.leaveRequestId,
+    karyawan: { nama: item.employee?.fullName, kode: item.employee?.nikKaryawan || '-' },
+    jenisCuti: item.leaveType?.name || 'Cuti',
+    durasi: `${dateText(item.startDate)} - ${dateText(item.endDate)} (${item.totalDays || 0} Hari)`,
+    statusBerkas: statusCode(status),
+    keterangan: item.reason || '-',
+    pekerjaanTertunda: item.pendingWork || '-',
+    dicoverOleh: item.coveredBy || '-',
+    approvalChain: { leader: '-', spv: '-', manager: '-' },
+    riwayatLog: hasBeenReviewed ? [{
+      nama: item.reviewedBy?.fullName || 'Sistem',
+      waktu: logDateText(item.approvedAt || item.returnedAt),
+      statusBadge: logStatusLabel(status),
+      catatan: item.reviewNote || '-',
+    }] : [],
+  };
+}
+
+export async function getAllLeaveRequestsForHr() {
+  return (await api.get('/api/cuti')).map(mapKaryawanLeave);
 }
 
 export const getPendingApprovals = async () => (await api.get('/api/cuti/approvals/my-task')).map(mapApproval);

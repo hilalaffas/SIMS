@@ -1,29 +1,103 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './LeaveFormHr.css';
+import { getLeaveTypes, getApprovers, submitUrgentCuti } from '../../../services/CutiService';
+import { isManagerOrSpv } from '../../../utils/roles';
+
+const initialFormState = {
+  karyawanId: '',
+  leaveTypeId: '',
+  startDate: '',
+  endDate: '',
+  leaderEmployeeId: '',
+  spvEmployeeId: '',
+  managerEmployeeId: '',
+  alasan: '',
+  pekerjaanTertunda: '',
+  dicoverOleh: '',
+};
 
 const LeaveFormHr = ({ karyawanList, onSubmit }) => {
-  const [formData, setFormData] = useState({
-    karyawanId: '',
-    jenisCuti: '',
-    startDate: '',
-    endDate: '',
-    leader: '',
-    spv: '',
-    manager: '',
-    alasan: '',
-    pekerjaanTertunda: '',
-    dicoverOleh: ''
-  });
+  const [formData, setFormData] = useState(initialFormState);
+  // [BARU] Data pendukung form (jenis cuti & daftar approver) sekarang
+  // diambil dari backend asli, bukan opsi statis lagi.
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [leaderOptions, setLeaderOptions] = useState([]);
+  const [spvOptions, setSpvOptions] = useState([]);
+  const [managerOptions, setManagerOptions] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [types, leaders, spvs, managers] = await Promise.all([
+          getLeaveTypes(),
+          getApprovers('LEADER'),
+          getApprovers('SPV'),
+          getApprovers('MANAGER'),
+        ]);
+        setLeaveTypes(types || []);
+        setLeaderOptions(leaders || []);
+        setSpvOptions(spvs || []);
+        setManagerOptions(managers || []);
+      } catch (error) {
+        console.error('Gagal memuat data pendukung form cuti susulan:', error);
+      }
+    })();
+  }, []);
+
+  // [BARU] Kalau karyawan yang dipilih sendiri berperan Leader/SPV/Manager,
+  // cukup pilih approver Manager saja — disamakan dengan aturan backend di
+  // LeaveService.createApprovalStepsAutoApproved (dan alur Ajukan Cuti biasa).
+  const selectedKaryawan = useMemo(
+    () => karyawanList?.find((k) => String(k.employeeId || k.id) === String(formData.karyawanId)),
+    [karyawanList, formData.karyawanId]
+  );
+  const selectedIsApproverLevel = isManagerOrSpv({ jabatan: selectedKaryawan?.user?.roleId?.roleName });
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (onSubmit) onSubmit(formData);
-    // Reset form setelah submit (opsional)
+    setErrorMessage('');
+
+    if (!selectedIsApproverLevel && (!formData.leaderEmployeeId || !formData.spvEmployeeId)) {
+      setErrorMessage('Leader dan SPV wajib dipilih untuk karyawan ini.');
+      return;
+    }
+    if (!formData.managerEmployeeId) {
+      setErrorMessage('Manager wajib dipilih.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // [UBAH] Submit langsung ke backend (POST /api/cuti/urgent), bukan lagi
+      // console.log + state lokal. Endpoint ini otomatis auto-ACC di sisi
+      // server, khusus untuk role HR Admin/Super Admin.
+      await submitUrgentCuti({
+        karyawanId: formData.karyawanId,
+        leaveTypeId: formData.leaveTypeId,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        alasan: formData.alasan,
+        pekerjaanTertunda: formData.pekerjaanTertunda,
+        dicoverOleh: formData.dicoverOleh,
+        leaderEmployeeId: selectedIsApproverLevel ? null : formData.leaderEmployeeId,
+        spvEmployeeId: selectedIsApproverLevel ? null : formData.spvEmployeeId,
+        managerEmployeeId: formData.managerEmployeeId,
+      });
+
+      setFormData(initialFormState);
+      if (onSubmit) onSubmit({ karyawanNama: selectedKaryawan?.fullName });
+    } catch (error) {
+      setErrorMessage(error?.message || 'Gagal memproses cuti susulan. Coba lagi.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -40,7 +114,7 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
           </svg>
           <h2>Formulir Cuti Susulan Karyawan</h2>
         </div>
-        <p>Formulir khusus HR untuk mencatat cuti di tanggal yang sudah lewat. Akan langsung disetujui (bypass aturan).</p>
+        <p>Formulir khusus HR untuk mencatat cuti darurat/susulan atas nama karyawan (mis. cuti mendadak karena kabar duka). Pengajuan akan langsung berstatus Disetujui (auto-ACC), tanpa menunggu persetujuan Leader/SPV/Manager.</p>
       </div>
 
       <form className="body_leaveFormHr" onSubmit={handleSubmit}>
@@ -57,13 +131,12 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
             </select>
           </div>
           <div className="form-group_leaveFormHr">
-            <label>JENIS PERMOHONAN CUTI</label>
-            <select name="jenisCuti" value={formData.jenisCuti} onChange={handleInputChange} required>
+            <label>JENIS PERMOHONAN CUTI *</label>
+            <select name="leaveTypeId" value={formData.leaveTypeId} onChange={handleInputChange} required>
               <option value="">Pilih...</option>
-              <option value="Tahunan">Cuti Tahunan</option>
-              <option value="Sakit">Cuti Sakit</option>
-              <option value="Melahirkan">Cuti Melahirkan</option>
-              <option value="Urgent">Cuti Urgent / Kematian</option>
+              {leaveTypes.map((type) => (
+                <option key={type.leaveTypeId} value={type.leaveTypeId}>{type.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -84,30 +157,45 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
         </div>
 
         <div className="form-group_leaveFormHr mt-4">
-          <label>CATATAN ALUR APPROVAL (RIWAYAT) *</label>
+          <label>PILIH ALUR APPROVAL (UNTUK CATATAN) *</label>
           <div className="form-grid-3_leaveFormHr">
-            <div className="sub-group_leaveFormHr">
-              <span className="sub-label_leaveFormHr">Leader</span>
-              <select name="leader" value={formData.leader} onChange={handleInputChange}>
-                <option value="">Pilih...</option>
-                <option value="Auto-ACC">Bypass (Auto-ACC)</option>
-              </select>
-            </div>
-            <div className="sub-group_leaveFormHr">
-              <span className="sub-label_leaveFormHr">SPV</span>
-              <select name="spv" value={formData.spv} onChange={handleInputChange}>
-                <option value="">Pilih...</option>
-                <option value="Auto-ACC">Bypass (Auto-ACC)</option>
-              </select>
-            </div>
+            {!selectedIsApproverLevel && (
+              <>
+                <div className="sub-group_leaveFormHr">
+                  <span className="sub-label_leaveFormHr">Leader</span>
+                  <select name="leaderEmployeeId" value={formData.leaderEmployeeId} onChange={handleInputChange}>
+                    <option value="">Pilih...</option>
+                    {leaderOptions.map((a) => (
+                      <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sub-group_leaveFormHr">
+                  <span className="sub-label_leaveFormHr">SPV</span>
+                  <select name="spvEmployeeId" value={formData.spvEmployeeId} onChange={handleInputChange}>
+                    <option value="">Pilih...</option>
+                    {spvOptions.map((a) => (
+                      <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
             <div className="sub-group_leaveFormHr">
               <span className="sub-label_leaveFormHr">Manager</span>
-              <select name="manager" value={formData.manager} onChange={handleInputChange}>
+              <select name="managerEmployeeId" value={formData.managerEmployeeId} onChange={handleInputChange}>
                 <option value="">Pilih...</option>
-                <option value="Auto-ACC">Bypass (Auto-ACC)</option>
+                {managerOptions.map((a) => (
+                  <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
+                ))}
               </select>
             </div>
           </div>
+          {selectedIsApproverLevel && (
+            <p className="info-box_leaveFormHr" style={{ marginTop: 8 }}>
+              Karyawan ini berperan sebagai Leader/SPV/Manager, jadi cukup pilih Manager (peer review) saja.
+            </p>
+          )}
         </div>
 
         <div className="form-group_leaveFormHr">
@@ -125,8 +213,14 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
           <input type="text" name="dicoverOleh" placeholder="Nama rekan kerja yang mem-backup..." value={formData.dicoverOleh} onChange={handleInputChange} required />
         </div>
 
+        {errorMessage && (
+          <div className="info-box_leaveFormHr" style={{ borderColor: '#f87171', color: '#b91c1c' }}>{errorMessage}</div>
+        )}
+
         <div className="footer-actions_leaveFormHr">
-          <button type="submit" className="btn-submit_leaveFormHr">Proses Cuti Susulan (Auto-ACC)</button>
+          <button type="submit" className="btn-submit_leaveFormHr" disabled={isSubmitting}>
+            {isSubmitting ? 'Memproses...' : 'Proses Cuti Susulan (Auto-ACC)'}
+          </button>
         </div>
       </form>
     </div>

@@ -195,6 +195,15 @@ public class SecurityConfig {
                                 "SPV",
                                 "MANAGER")
 
+                        // [BARU] Cuti darurat/susulan yang diinput HR/Super Admin atas nama
+                        // karyawan lain (auto-ACC) — HARUS ditaruh SEBELUM aturan
+                        // "POST /api/cuti" di bawah supaya tidak ketiban .authenticated()
+                        // yang lebih longgar (walau path-nya beda, urutan tetap dijaga
+                        // biar konsisten dengan pola di file ini).
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/cuti/urgent")
+                        .hasAnyRole(ADMIN_ROLES)
+
                         .requestMatchers(HttpMethod.POST,
                                 "/api/cuti")
                         .authenticated()

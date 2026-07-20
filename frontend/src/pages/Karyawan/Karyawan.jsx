@@ -12,7 +12,9 @@ import DataDivisi from './components/DataDivisi';
 import LogSistem from './components/LogSistem';
 import LeaveFormHr from './components/LeaveFormHr';
 import LeaveListHr from './components/LeaveListHr';
-import {allLeaveHistory} from '../Cuti/approve/data/mockData';
+// [UBAH] Data cuti karyawan sekarang diambil dari backend asli
+// (getAllLeaveRequestsForHr), bukan lagi dari mock allLeaveHistory.
+import { getAllLeaveRequestsForHr } from '../../services/CutiService';
 import FormCuti from '../Cuti/approve/components/Form';
 import { getKaryawanList, deleteKaryawan } from '../../services/karyawanService';
 import { getSystemLogs } from '../../services/logService'; 
@@ -42,8 +44,9 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
 
 
   const [karyawanList, setKaryawanList] = useState([]);
-  // [BARU] State untuk data cuti HR
-  const [riwayatCuti, setRiwayatCuti] = useState(allLeaveHistory || []);
+  // [UBAH] State data cuti HR — sekarang diisi dari backend asli (lihat
+  // fetchRiwayatCuti), tidak lagi dari mock allLeaveHistory.
+  const [riwayatCuti, setRiwayatCuti] = useState([]);
   
   // [BARU] State untuk mengontrol Tab Menu yang sedang aktif
   const [activeTab, setActiveTab] = useState('List Karyawan');
@@ -126,6 +129,18 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
     fetchKaryawan();
   }, []);
 
+  // [BARU] Ambil data cuti karyawan (termasuk hasil Cuti Susulan HR) dari
+  // backend asli — dipanggil ulang tiap kali tab "Cuti Karyawan" dibuka atau
+  // setelah HR berhasil submit cuti susulan, supaya tabel selalu sinkron.
+  const fetchRiwayatCuti = async () => {
+    try {
+      const data = await getAllLeaveRequestsForHr();
+      setRiwayatCuti(data || []);
+    } catch (error) {
+      console.error('Gagal menarik data cuti karyawan:', error);
+    }
+  };
+
   // [BARU] Auto-buka modal edit karyawan kalau halaman ini diakses dari
   // notifikasi reset sandi (query param employeeId & resetRequestId).
   // Menunggu karyawanList terisi dulu supaya pencariannya tidak sia-sia.
@@ -152,6 +167,14 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
   useEffect(() => {
     if (activeTab === 'Log Sistem') {
       fetchLogs();
+    }
+  }, [activeTab]);
+
+  // [BARU] Sama seperti Log Sistem: fetch data cuti hanya saat tab
+  // "Cuti Karyawan" dibuka, supaya tidak ada API call yang sia-sia.
+  useEffect(() => {
+    if (activeTab === 'Cuti Karyawan') {
+      fetchRiwayatCuti();
     }
   }, [activeTab]);
 
@@ -218,49 +241,37 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
     );
   }
 
-  // Fungsi ketika HR submit cuti susulan
-  const handleSubmitCutiSusulan = (formData) => {
-      console.log("Submit Cuti Susulan Data:", formData);
-      
-      // PERBAIKAN: Gunakan k.employeeId atau k.id untuk pencarian
-      const karyawan = karyawanList.find(k => (k.employeeId || k.id) === formData.karyawanId);
-      
-      // PERBAIKAN: Gunakan fullName, bukan name
-      const namaKaryawan = karyawan ? karyawan.fullName : 'Karyawan';
-  
-      const cutiBaru = {
-        id: `CUTI-HR-${Date.now()}`,
-        // PERBAIKAN: Gunakan nikKaryawan, bukan nik
-        karyawan: { nama: namaKaryawan, kode: karyawan?.nikKaryawan || '-' },
-        jenisCuti: formData.jenisCuti,
-        durasi: `${formData.startDate} s/d ${formData.endDate}`,
-        statusBerkas: 'DISETUJUI', 
-      };
-    
-      setRiwayatCuti((prev) => [cutiBaru, ...prev]);
-      
-      addLogActivity(user?.name || 'Admin HR', `menginput cuti susulan (Auto-ACC) untuk "${namaKaryawan}".  `);
-      
-      alert('Cuti susulan berhasil diproses!');
-    };
-  
-    // Fungsi ketika HR melakukan Revoke (Pulihkan)
-    const handleRevokeCuti = (cutiId) => {
-    // 1. Cari data yang akan di-revoke terlebih dahulu
-      const targetCuti = riwayatCuti.find(item => item.id === cutiId);
-      
-      if (targetCuti) {
-        // 2. Catat log hanya SATU KALI di sini
-        addLogActivity(user?.name || 'Admin HR', `memulihkan (revoke) status cuti "${targetCuti.karyawan?.    nama}" kembali ke Proses.`);
-        
-        // 3. Update state setelah log berhasil dicatat
-        setRiwayatCuti((prev) => 
-          prev.map(item => 
-            item.id === cutiId ? { ...item, statusBerkas: 'PROSES' } : item
-          )
-        );
-      }
-    };
+  // [UBAH] Fungsi ketika HR submit cuti susulan — pengiriman ke backend
+  // (POST /api/cuti/urgent) SUDAH dilakukan di dalam LeaveFormHr.jsx (sama
+  // seperti pola FormKaryawan.jsx untuk tambah karyawan). Di sini kita
+  // cukup refetch dari server supaya tabel selalu konsisten dengan data asli.
+  const handleSubmitCutiSusulan = async (info) => {
+    try {
+      await fetchRiwayatCuti();
+      addLogActivity(user?.name || 'Admin HR', `menginput cuti susulan (Auto-ACC) untuk "${info?.karyawanNama || 'karyawan'}".`);
+    } catch (error) {
+      console.error('Gagal me-refresh riwayat cuti setelah submit cuti susulan:', error);
+    }
+  };
+
+  // [BELUM TERHUBUNG BACKEND] Revoke/Pulihkan cuti masih mengubah state
+  // lokal saja (belum ada endpoint restore/force-cancel di backend). Efeknya
+  // hanya tampil sementara di layar dan akan kembali ke data asli begitu tab
+  // ini dibuka ulang atau halaman di-refresh. Ini scope terpisah dari Cuti
+  // Susulan — belum digarap di iterasi ini.
+  const handleRevokeCuti = (cutiId) => {
+    const targetCuti = riwayatCuti.find(item => item.id === cutiId);
+
+    if (targetCuti) {
+      addLogActivity(user?.name || 'Admin HR', `memulihkan (revoke) status cuti "${targetCuti.karyawan?.nama}" kembali ke Proses. (belum tersimpan ke backend)`);
+
+      setRiwayatCuti((prev) =>
+        prev.map(item =>
+          item.id === cutiId ? { ...item, statusBerkas: 'PROSES' } : item
+        )
+      );
+    }
+  };
 
   return (
     <div className="karyawan-page">
@@ -298,6 +309,10 @@ const [detailCutiTarget, setDetailCutiTarget] = useState(null);
             
             <LeaveListHr 
               data={riwayatCuti} 
+              // [BELUM] Sisa Cuti masih placeholder sama untuk semua karyawan
+              // (backend belum punya endpoint saldo per-karyawan arbitrary,
+              // getMyLeaveBalance saat ini hanya untuk user yang login sendiri).
+              // Di luar scope Cuti Susulan — perlu endpoint baru kalau mau digarap.
               sisaCuti={{ totalHari: 12 }} 
               currentUserRole={currentUserRole}
               onOpenDetail={(item) => setDetailCutiTarget(item)}
