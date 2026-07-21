@@ -1,11 +1,10 @@
 package sys.hris.sims.leave.dto;
 
+import java.time.LocalDate;
+import java.util.List;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -19,9 +18,14 @@ public class LeaveApprovalResponse {
     private String reason;
     private String pendingWork;
     private String coveredBy;
+    private Long leaderEmployeeId;
+    private String leaderName;
+    private Long spvEmployeeId;
+    private String spvName;
+    private Long managerEmployeeId;
+    private String managerName;
     private String overallStatus;
     private String myApprovalStatus;
     private String reviewNote;
     private List<LeaveApprovalLogResponse> approvalLogs;
-    private LocalDateTime submittedAt; // [BARU] dipakai utk timestamp notifikasi lonceng approver
 }

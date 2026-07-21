@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { hariLiburNasional } from '../../../../utils/dateUtils'; // sesuaikan path file Anda
 import './LeaveForm.css';
-
-export const hariLiburNasional = [];
 
 const localFormatDateDisplay = (dateStr) => {
   if (!dateStr) return '';
@@ -58,16 +57,12 @@ const LeaveTypeDateSection = ({
 
   const isMendesak = leaveType === 'Cuti Urgent' || leaveType === 'Cuti Berduka';
 
-  useEffect(() => {
-    if (startDate) {
-      const dDate = new Date(startDate);
-      setDariViewDate(new Date(dDate.getFullYear(), dDate.getMonth(), 1));
-    }
-    if (endDate) {
-      const sDate = new Date(endDate);
-      setSampaiViewDate(new Date(sDate.getFullYear(), sDate.getMonth(), 1));
-    }
-  }, [startDate, endDate]);
+  const handleSelectDate = (item, setDateState, setViewDateState, setShowCalendar, minDateStr = null) => {
+    const selectedStr = `${item.year}-${String(item.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}`;
+    if (minDateStr && new Date(selectedStr) < new Date(minDateStr)) return;
+    setDateState(selectedStr);
+    setShowCalendar(false);
+  };
 
   // PERBAIKAN: jika "Dari Tanggal" diubah menjadi lebih baru dari "Sampai Tanggal"
   // yang sudah dipilih sebelumnya, reset "Sampai Tanggal" agar rentang tidak terbalik.
@@ -87,12 +82,7 @@ const LeaveTypeDateSection = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectDate = (item, setDateState, setShowCalendar, minDateStr = null) => {
-    const selectedStr = `${item.year}-${String(item.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}`;
-    if (minDateStr && new Date(selectedStr) < new Date(minDateStr)) return;
-    setDateState(selectedStr);
-    setShowCalendar(false);
-  };
+
 
   const renderMiniCalendar = (viewDate, setViewDate, selectedDateStr, onSelect, minDateStr) => {
     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];

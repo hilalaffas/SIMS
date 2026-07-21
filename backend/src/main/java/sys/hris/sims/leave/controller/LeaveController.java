@@ -50,12 +50,18 @@ public class LeaveController {
         Employee employee = employeeRepository.findFirstByUser_Username(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Data karyawan tidak ditemukan untuk user ini"));
 
+        // catat activity log
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_MY_CUTI", "leave_requests", employee.getEmployeeId(), "Melihat riwayat cuti sendiri", httpRequest);
+
         return ResponseEntity.ok(cutiService.getCutiByKaryawan(employee.getEmployeeId()));
     }
 
     // GET semua cuti
     @GetMapping
     public ResponseEntity<List<LeaveRequest>> getAllCuti(Authentication authentication, HttpServletRequest httpRequest) {
+
+        // catat activity log
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_ALL_CUTI", "leave_requests", null, "Melihat semua data cuti", httpRequest);
 
         return ResponseEntity.ok(cutiService.getAllCuti());
     }
@@ -64,27 +70,41 @@ public class LeaveController {
     @GetMapping("/{id}")
     public ResponseEntity<LeaveRequest> getCutiById(@PathVariable Long id, Authentication authentication, HttpServletRequest httpRequest) {
 
+        // catat activity log
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_CUTI", "leave_requests", id, "Melihat detail cuti id: " + id, httpRequest);
         return ResponseEntity.ok(cutiService.getCutiById(id));
+    }
+
+    // GET detail cuti untuk pemohon sendiri, LENGKAP dengan info approver
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<LeaveApprovalResponse> getCutiDetail(@PathVariable Long id, Authentication authentication, HttpServletRequest httpRequest) {
+
+        // catat activity log
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_CUTI_DETAIL", "leave_requests", id, "Melihat detail cuti (lengkap approver) id: " + id, httpRequest);
+        
+        // Disesuaikan agar memanggil getMyLeaveDetail sesuai dengan LeaveService terbaru
+        return ResponseEntity.ok(cutiService.getMyLeaveDetail(id, authentication.getName()));
     }
 
     // GET cuti by karyawan
     @GetMapping("/karyawan/{idKaryawan}")
     public ResponseEntity<List<LeaveRequest>> getCutiByKaryawan(@PathVariable Long idKaryawan, Authentication authentication, HttpServletRequest httpRequest) {
-    
+
+        // catat activity log
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_CUTI_BY_KARYAWAN", "leave_requests", idKaryawan, "Melihat data cuti karyawan id: " + idKaryawan, httpRequest);
+        
         return ResponseEntity.ok(cutiService.getCutiByKaryawan(idKaryawan));
     }
 
     // GET total sisa cuti tahunan user yang sedang login
     @GetMapping("/balance/me")
-    public ResponseEntity<LeaveBalanceResponse> getMyLeaveBalance(Authentication authentication, HttpServletRequest httpRequest) {
-
+    public ResponseEntity<LeaveBalanceResponse> getMyLeaveBalance(Authentication authentication) {
         return ResponseEntity.ok(cutiService.getMyLeaveBalance(authentication.getName()));
     }
 
     // GET cuti yang perlu diproses oleh role atasan yang sedang login
     @GetMapping("/approvals/my-task")
-    public ResponseEntity<List<LeaveApprovalResponse>> getMyApprovalTasks(Authentication authentication, HttpServletRequest httpRequest) {
- 
+    public ResponseEntity<List<LeaveApprovalResponse>> getMyApprovalTasks(Authentication authentication) {
         return ResponseEntity.ok(cutiService.getApprovalTasks(authentication.getName()));
     }
 
@@ -92,16 +112,25 @@ public class LeaveController {
     @GetMapping("/approvals/history")
     public ResponseEntity<List<LeaveApprovalResponse>> getMyApprovalHistory(
             Authentication authentication,
-            @RequestParam(required = false) String status,
-            HttpServletRequest httpRequest) {
-  
+            @RequestParam(required = false) String status) {
         return ResponseEntity.ok(cutiService.getApprovalHistory(authentication.getName(), status));
     }
 
+    // GET detail berkas cuti untuk approver (Leader/SPV/Manager)
+    @GetMapping("/approvals/{id}")
+    public ResponseEntity<LeaveApprovalResponse> getApprovalDetailById(
+            @PathVariable Long id, Authentication authentication, HttpServletRequest httpRequest) {
+
+        // catat activity log
+        activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_APPROVAL_DETAIL", "leave_requests", id, "Melihat detail approval cuti id: " + id, httpRequest);
+        
+        // Disesuaikan agar memanggil getApprovalDetail sesuai dengan LeaveService terbaru
+        return ResponseEntity.ok(cutiService.getApprovalDetail(id, authentication.getName()));
+    }
+
     @GetMapping("/calendar")
-    public ResponseEntity<List<LeaveRequest>> getCalendarLeaves(@RequestParam int year, Authentication authentication, HttpServletRequest httpRequest) {
- 
-       return ResponseEntity.ok(cutiService.getCalendarLeaves(year));
+    public ResponseEntity<List<LeaveRequest>> getCalendarLeaves(@RequestParam int year) {
+        return ResponseEntity.ok(cutiService.getCalendarLeaves(year));
     }
 
     // POST ajukan cuti baru
@@ -115,10 +144,7 @@ public class LeaveController {
         return ResponseEntity.ok(saved);
     }
 
-    // [BARU] POST cuti darurat/susulan oleh HR Admin/Super Admin, atas nama
-    // karyawan lain — otomatis langsung ter-ACC (BR-07, FR-029, UC-15).
-    // Akses endpoint ini sudah dibatasi role HRD_ADMIN & SUPER_ADMIN di
-    // SecurityConfig (POST /api/cuti/urgent).
+    // [BARU MERGED] POST cuti darurat/susulan oleh HR Admin/Super Admin
     @PostMapping("/urgent")
     public ResponseEntity<LeaveRequest> createUrgentCuti(@RequestBody LeaveRequest cuti, Authentication authentication, HttpServletRequest httpRequest) {
 

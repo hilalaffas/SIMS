@@ -64,6 +64,8 @@ public class LeaveService {
         return cutiRepository.findByEmployee_EmployeeId(employeeId);
     }
 
+    // PERBAIKAN: endpoint detail cuti untuk si pemohon sendiri, LENGKAP dengan info
+    // approver (Leader/SPV/Manager). Data approver dipetakan lewat toApprovalResponse().
     public LeaveApprovalResponse getMyLeaveDetail(Long leaveRequestId, String username) {
         Employee requester = getEmployeeByUsername(username);
         LeaveRequest cuti = getCutiById(leaveRequestId);
@@ -210,6 +212,7 @@ public class LeaveService {
                 .toList();
     }
 
+    // PERBAIKAN: endpoint detail satu berkas untuk atasan (Leader/SPV/Manager).
     public LeaveApprovalResponse getApprovalDetail(Long leaveRequestId, String username) {
         Employee approver = getCurrentApprover(username);
         boolean assignedToApprover = approvalRepository
@@ -426,6 +429,11 @@ public class LeaveService {
                 ))
                 .toList();
 
+        // [MERGED] Mengambil data Leader, SPV, dan Manager dari tabel approvals
+        Employee leader = approvals.stream().filter(a->ROLE_LEADER.equals(a.getApproverRole())).map(LeaveRequestApproval::getApproverEmployee).findFirst().orElse(null);
+        Employee spv = approvals.stream().filter(a->ROLE_SPV.equals(a.getApproverRole())).map(LeaveRequestApproval::getApproverEmployee).findFirst().orElse(null);
+        Employee manager = approvals.stream().filter(a->ROLE_MANAGER.equals(a.getApproverRole())).map(LeaveRequestApproval::getApproverEmployee).findFirst().orElse(null);
+
         return new LeaveApprovalResponse(
                 cuti.getLeaveRequestId(),
                 cuti.getEmployee().getFullName(),
@@ -436,10 +444,18 @@ public class LeaveService {
                 cuti.getReason(),
                 cuti.getPendingWork(),
                 cuti.getCoveredBy(),
+                // [MERGED] Data approver ditambahkan
+                leader==null?null:leader.getEmployeeId(),
+                leader==null?null:leader.getFullName(),
+                spv==null?null:spv.getEmployeeId(),
+                spv==null?null:spv.getFullName(),
+                manager==null?null:manager.getEmployeeId(),
+                manager==null?null:manager.getFullName(),
                 cuti.getStatus().getStatusName(),
                 myApprovalStatus,
                 cuti.getReviewNote(),
                 logs,
+                // [MERGED] Field submittedAt dari versi HR Urgent
                 cuti.getSubmittedAt()
         );
     }

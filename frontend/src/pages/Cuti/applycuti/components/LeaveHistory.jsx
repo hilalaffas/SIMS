@@ -57,7 +57,7 @@ const LeaveHistory = ({
   // MODIFIKASI 1: Amankan pencocokan filter status (termasuk toleransi "proses" dan "dalam proses")
   const filteredRiwayat = riwayatCuti.filter(item => {
     if (filterStatus === 'Semua Berkas') return true;
-    const statusLower = item.status?.toLowerCase() || '';
+    const statusLower = String(item.status || '').toLowerCase();
     if (filterStatus === 'Dalam Proses') {
       return statusLower === 'proses' || statusLower === 'dalam proses';
     }
@@ -94,7 +94,9 @@ const LeaveHistory = ({
         ) : (
           <div className="history-list">
             {filteredRiwayat.map((item) => {
-              const statusLower = item.status ? item.status.toLowerCase() : 'proses';
+              // Pengaman string untuk mencegah error runtime .toLowerCase() & .toUpperCase()
+              const statusLower = String(item.status || 'proses').toLowerCase();
+              const statusUpper = String(item.status || 'PROSES').toUpperCase();
               const classCleanStatus = statusLower.replace(/[^a-z]/g, '');
               
               // MODIFIKASI 2: Normalisasi deteksi status proses agar pengajuan baru langsung klop
@@ -103,10 +105,16 @@ const LeaveHistory = ({
 
               return (
                 <div key={item.id} className={`history-item-card ${isDikembalikan ? 'border-alert-red' : ''}`}>
-                  <div className="history-item-left" onClick={isProses ? undefined : () => handleOpenDetail(item)} style={{ cursor: isProses ? 'default' : 'pointer' }}>
+                  {/* PERBAIKAN 1: Bagian kiri sekarang dapat diklik saat status DALAM PROSES */}
+                  <div className="history-item-left" onClick={() => handleOpenDetail(item)} style={{ cursor: 'pointer' }}>
                     {item.isUnread && <span className="dot-badge-item"></span>}
                     <div className="history-item-info">
-                      <span className="history-item-leave-type">{item.jenisCuti}</span>
+                      {/* PERBAIKAN 2: Mengamankan tipe data object leaveType dari backend */}
+                      <span className="history-item-leave-type">
+                        {typeof item.jenisCuti === 'object' && item.jenisCuti !== null 
+                          ? item.jenisCuti.name 
+                          : item.jenisCuti}
+                      </span>
                       <p className="history-item-dates">
                         {item.stringTanggal} {item.totalHari && `(${item.totalHari})`}
                       </p>
@@ -116,7 +124,12 @@ const LeaveHistory = ({
                   <div className="history-item-actions">
                     {isProses ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span className="status-badge-list dalam-proses">
+                        {/* PERBAIKAN 3: Menambahkan onClick dan style pointer pada badge DALAM PROSES */}
+                        <span 
+                          className="status-badge-list dalam-proses" 
+                          onClick={() => handleOpenDetail(item)} 
+                          style={{ cursor: 'pointer' }}
+                        >
                           DALAM PROSES
                         </span>
                       </div>
@@ -131,7 +144,7 @@ const LeaveHistory = ({
                       </div>
                     ) : (
                       <button type="button" className={`status-badge-btn ${classCleanStatus}`} onClick={() => handleOpenDetail(item)}>
-                        {classCleanStatus === 'disetujuiacc' ? 'DISETUJUI' : item.status.toUpperCase()}
+                        {classCleanStatus === 'disetujuiacc' ? 'DISETUJUI' : statusUpper}
                       </button>
                     )}
                   </div>

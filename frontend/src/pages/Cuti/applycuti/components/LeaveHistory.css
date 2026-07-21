@@ -221,6 +221,15 @@
   background-color: #d1fae5;
 }
 
+.status-badge-btn.ditolak {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.status-badge-btn.ditolak:hover {
+  background-color: #fee2e2;
+}
+
 .status-badge-list {
   padding: 6px 14px !important;
   border-radius: 6px !important;

@@ -1,26 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './LeaveForm.css';
 
-// PINDAHAN DARI ApplyCuti.jsx
-export const hariLiburNasional = [];
-
-export const hitungBatasMinTanggal = (jumlahHariKerja, daftarHariLibur = []) => {
-  let date = new Date();
-  let sisaHari = jumlahHariKerja;
-
-  while (sisaHari > 0) {
-    date.setDate(date.getDate() + 1);
-    const dayOfWeek = date.getDay();
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isTanggalMerah = daftarHariLibur.includes(dateStr);
-
-    if (!isWeekend && !isTanggalMerah) {
-      sisaHari--;
-    }
-  }
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
 
 // Fungsi internal format text lokal kalender
 const localFormatDateDisplay = (dateStr) => {
@@ -32,21 +12,21 @@ const localFormatDateDisplay = (dateStr) => {
 const LeaveForm = ({
   jenisCuti, setJenisCuti,
   durasiSesi, setDurasiSesi,
-  dariTanggal, setDariTanggal,
-  sampaiTanggal, setSampaiTanggal,
-  alasan, setAlasan,
+  startDate, setStartDate,
+  endDate, setEndDate,
+  reason, setReason,
   leaderApproval, setLeaderApproval,
   spvApproval, setSpvApproval,
   managerApproval, setManagerApproval,
-  pekerjaanTertunda, setPekerjaanTertunda,
-  coverOleh, setCoverOleh,
-  jedaHariKerja,
+  pendingWork, setPendingWork,
+  coveredBy, setCoveredBy,
   dinamisBatasMinStr,
   handleSubmit,
   isSubmitting,
   jumlahHariCuti = 0,
   canApplyCuti,
   todayStr,
+  currentUserRole,
   leaveTypes = [],
   approvers = { LEADER: [], SPV: [], MANAGER: [] },
   isSupervisor = false,
@@ -67,19 +47,19 @@ const LeaveForm = ({
   const isMendesak = ['cuti urgent', 'cuti berduka'].includes(normalizedLeaveType);
   const isHalfDayLeave = normalizedLeaveType === 'cuti setengah hari';
 
-  const approverDivisi = [...approvers.LEADER, ...approvers.SPV, ...approvers.MANAGER]
-    .find(person => person.namaDivisi)?.namaDivisi;
+  // Format deteksi huruf kecil untuk mencegah kesalahan penulisan string role
+  const isKaryawan = currentUserRole?.toLowerCase() === 'karyawan';
 
   useEffect(() => {
-    if (dariTanggal) {
-      const dDate = new Date(dariTanggal);
+    if (startDate) {
+      const dDate = new Date(startDate);
       setDariViewDate(new Date(dDate.getFullYear(), dDate.getMonth(), 1));
     }
-    if (sampaiTanggal) {
-      const sDate = new Date(sampaiTanggal);
+    if (endDate) {
+      const sDate = new Date(endDate);
       setSampaiViewDate(new Date(sDate.getFullYear(), sDate.getMonth(), 1));
     }
-  }, [dariTanggal, sampaiTanggal]);
+  }, [startDate, endDate]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -188,30 +168,28 @@ const LeaveForm = ({
           <div className="form-group flex-1" ref={dariRef} style={{ position: 'relative' }}>
             <label className="form-label">DARI TANGGAL</label>
             <div className="input-with-icon">
-              <input type="text" readOnly value={localFormatDateDisplay(dariTanggal)} onClick={() => setShowDariCalendar(!showDariCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
+              <input type="text" readOnly value={localFormatDateDisplay(startDate)} onClick={() => setShowDariCalendar(!showDariCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
               <i className="fa-regular fa-calendar-days input-icon-inside"></i>
             </div>
             {showDariCalendar && (() => {
               const batasMinDariStr = isMendesak ? todayStr : dinamisBatasMinStr;
-              return renderMiniCalendar(dariViewDate, setDariViewDate, dariTanggal, (item) => handleSelectDate(item, setDariTanggal, setShowDariCalendar, batasMinDariStr), batasMinDariStr);
+              return renderMiniCalendar(dariViewDate, setDariViewDate, startDate, (item) => handleSelectDate(item, setStartDate, setShowDariCalendar, batasMinDariStr), batasMinDariStr);
             })()}
           </div>
 
           <div className="form-group flex-1" ref={sampaiRef} style={{ position: 'relative' }}>
             <label className="form-label">SAMPAI TANGGAL</label>
             <div className="input-with-icon">
-              <input type="text" readOnly value={localFormatDateDisplay(sampaiTanggal)} onClick={() => setShowSampaiCalendar(!showSampaiCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
+              <input type="text" readOnly value={localFormatDateDisplay(endDate)} onClick={() => setShowSampaiCalendar(!showSampaiCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
               <i className="fa-regular fa-calendar-days input-icon-inside"></i>
             </div>
             {showSampaiCalendar && (() => {
-               const batasMinSampaiStr = isMendesak 
-                 ? dariTanggal 
-                 : (new Date(dariTanggal) > new Date(dinamisBatasMinStr) ? dariTanggal : dinamisBatasMinStr);
+               const batasMinSampaiStr = startDate; 
 
                return renderMiniCalendar(
-                 sampaiViewDate, setSampaiViewDate, sampaiTanggal, 
-                 (item) => handleSelectDate(item, setSampaiTanggal, setShowSampaiCalendar, batasMinSampaiStr), 
-                 batasMinSampaiStr
+                 sampaiViewDate, setSampaiViewDate, endDate, 
+                  (item) => handleSelectDate(item, setEndDate, setShowSampaiCalendar, batasMinSampaiStr), 
+                  batasMinSampaiStr
                );
             })()}
           </div>
@@ -223,11 +201,6 @@ const LeaveForm = ({
 
         <div className="form-group">
           <label className="form-label">PILIH ALUR APPROVAL CUTI *</label>
-          {approverDivisi && (
-            <div className="duration-info-alert">
-              Alur approval Divisi {approverDivisi}
-            </div>
-          )}
           <div className="approval-row">
             <div className="approval-col">
               <span className="badge-approval leader">Leader</span>
@@ -255,17 +228,17 @@ const LeaveForm = ({
 
         <div className="form-group">
           <label className="form-label">ALASAN / KETERANGAN *</label>
-          <textarea rows="3" value={alasan} onChange={(e) => setAlasan(e.target.value)} placeholder="Berikan alasan yang jelas..." className="form-control textarea-control" required />
+          <textarea rows="3" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Berikan alasan yang jelas..." className="form-control textarea-control" required />
         </div>
 
         <div className="form-group">
           <label className="form-label">PEKERJAAN TERTUNDA *</label>
-          <textarea rows="2" value={pekerjaanTertunda} onChange={(e) => setPekerjaanTertunda(e.target.value)} placeholder="Sebutkan pekerjaan apa saja yang tertunda..." className="form-control textarea-control" required />
+          <textarea rows="2" value={pendingWork} onChange={(e) => setPendingWork(e.target.value)} placeholder="Sebutkan pekerjaan apa saja yang tertunda..." className="form-control textarea-control" required />
         </div>
 
         <div className="form-group">
           <label className="form-label">DICOVER OLEH (BACKUP PIC) *</label>
-          <input type="text" value={coverOleh} onChange={(e) => setCoverOleh(e.target.value)} placeholder="Nama rekan kerja yang mem-backup pekerjaan Anda..." className="form-control" required />
+          <input type="text" value={coveredBy} onChange={(e) => setCoveredBy(e.target.value)} placeholder="Nama rekan kerja yang mem-backup pekerjaan Anda..." className="form-control" required />
         </div>
 
         <div className="btn-group-right" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
