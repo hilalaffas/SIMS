@@ -1,5 +1,6 @@
 package sys.hris.sims.leave.service;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -64,21 +65,6 @@ public class LeaveService {
         return cutiRepository.findByEmployee_EmployeeId(employeeId);
     }
 
-    /**
-     * [BARU] Riwayat approval PER-LEVEL (Leader/SPV/Manager) untuk cuti milik
-     * sendiri — dipakai frontend untuk notifikasi granular ke pengaju setiap
-     * kali satu level approve (bukan cuma status akhir). Reuse
-     * toApprovalResponse() yang sudah ada; currentEmployeeId sengaja null
-     * karena di sini yang melihat adalah PENGAJU, bukan approver, jadi field
-     * myApprovalStatus tidak relevan.
-     */
-    public List<LeaveApprovalResponse> getMyApprovalTimeline(String username) {
-        Employee requester = getEmployeeByUsername(username);
-        return getCutiByKaryawan(requester.getEmployeeId()).stream()
-                .map(cuti -> toApprovalResponse(cuti, null))
-                .toList();
-    }
-
     // Endpoint detail cuti untuk si pemohon sendiri, LENGKAP dengan info
     // approver (Leader/SPV/Manager). Data approver dipetakan lewat toApprovalResponse().
     public LeaveApprovalResponse getMyLeaveDetail(Long leaveRequestId, String username) {
@@ -122,8 +108,8 @@ public class LeaveService {
 
         ensureNoOverlap(requester, cuti);
 
-        int totalDays = calculateWorkingDays(cuti.getStartDate(), cuti.getEndDate());
-        if (totalDays <= 0) {
+        BigDecimal totalDays = calculateLeaveDays(cuti);
+        if (totalDays.signum() <= 0) {
             throw new RuntimeException("Rentang cuti harus memiliki minimal satu hari kerja");
         }
 
@@ -151,8 +137,8 @@ public class LeaveService {
         cuti.setEmployee(targetEmployee);
         ensureNoOverlap(targetEmployee, cuti);
 
-        int totalDays = calculateWorkingDays(cuti.getStartDate(), cuti.getEndDate());
-        if (totalDays <= 0) {
+        BigDecimal totalDays = calculateLeaveDays(cuti);
+        if (totalDays.signum() <= 0) {
             throw new RuntimeException("Rentang cuti harus memiliki minimal satu hari kerja");
         }
 
@@ -244,19 +230,19 @@ public class LeaveService {
         LeaveType annualLeave = leaveTypeRepository.findByNameIgnoreCase("Cuti tahunan")
                 .orElse(null);
 
-        Integer annualQuota = getAnnualQuota(employee, annualLeave);
-        Integer usedAnnualLeave = getCutiByKaryawan(employee.getEmployeeId()).stream()
+        BigDecimal annualQuota = BigDecimal.valueOf(getAnnualQuota(employee, annualLeave));
+        BigDecimal usedAnnualLeave = getCutiByKaryawan(employee.getEmployeeId()).stream()
                 .filter(cuti -> ACTION_APPROVED.equalsIgnoreCase(cuti.getStatus().getStatusName()))
                 .filter(cuti -> Boolean.TRUE.equals(cuti.getLeaveType().getDeductsAnnualQuota()))
-                .map(cuti -> calculateWorkingDays(cuti.getStartDate(), cuti.getEndDate()))
-                .reduce(0, Integer::sum);
+                .map(LeaveRequest::getTotalDays)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return new LeaveBalanceResponse(
                 employee.getEmployeeId(),
                 employee.getFullName(),
                 annualQuota,
                 usedAnnualLeave,
-                Math.max(annualQuota - usedAnnualLeave, 0)
+                annualQuota.subtract(usedAnnualLeave).max(BigDecimal.ZERO)
         );
     }
 
@@ -288,8 +274,8 @@ public class LeaveService {
                 .orElseThrow(() -> new RuntimeException("Jenis cuti tidak ditemukan")));
         existingCuti.setStartDate(updatedCuti.getStartDate());
         existingCuti.setEndDate(updatedCuti.getEndDate());
-        int totalDays = calculateWorkingDays(updatedCuti.getStartDate(), updatedCuti.getEndDate());
-        if (totalDays <= 0) {
+        BigDecimal totalDays = calculateLeaveDays(existingCuti);
+        if (totalDays.signum() <= 0) {
             throw new RuntimeException("Rentang cuti harus memiliki minimal satu hari kerja");
         }
         existingCuti.setTotalDays(totalDays);
@@ -466,6 +452,7 @@ public class LeaveService {
                 spv==null?null:spv.getFullName(),
                 manager==null?null:manager.getEmployeeId(),
                 manager==null?null:manager.getFullName(),
+                cuti.getSubmittedAt(),
                 cuti.getStatus().getStatusName(),
                 myApprovalStatus,
                 cuti.getReviewNote(),
@@ -520,6 +507,23 @@ public class LeaveService {
         }
 
         return annualLeave.getQuotaMale();
+    }
+
+    private BigDecimal calculateLeaveDays(LeaveRequest cuti) {
+        int workingDays = calculateWorkingDays(cuti.getStartDate(), cuti.getEndDate());
+        if (workingDays <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        String leaveTypeName = cuti.getLeaveType() == null ? "" : cuti.getLeaveType().getName();
+        if ("Cuti setengah hari".equalsIgnoreCase(leaveTypeName)) {
+            if (!cuti.getStartDate().equals(cuti.getEndDate())) {
+                throw new RuntimeException("Cuti setengah hari hanya dapat diajukan untuk satu tanggal");
+            }
+            return new BigDecimal("0.5");
+        }
+
+        return BigDecimal.valueOf(workingDays);
     }
 
     private String normalizeApproverRole(String roleName) {

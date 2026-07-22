@@ -4,7 +4,7 @@ import LeaveSummaryCard from './components/LeaveSummaryCard';
 import LeaveForm from './components/LeaveForm';
 import { hariLiburNasional, hitungBatasMinTanggal } from '../../../utils/dateUtils'; // sesuaikan path file Anda
 import LeaveHistory from './components/LeaveHistory';
-import LeaveDetailModal from './components/LeaveDetailModal';
+import FormCuti from '../approve/components/Form';
 import { getAllHolidays } from '../../../services/holidayService';
 import './ApplyCuti.css';
 
@@ -89,7 +89,13 @@ const ApplyCuti = ({ user }) => {
       ]);
       setTypes(leaveTypes); setJenisCuti(current => current || leaveTypes[0]?.name || '');
       setApprovers({ LEADER: leader, SPV: spv, MANAGER: manager });
-      setBalance(leaveBalance.remainingAnnualLeave ?? 0); setHistory(records); setHolidayDates(new Set(holidays.map((holiday) => holiday.date))); setError('');
+      // Kompensasi data lama yang pernah tersimpan sebagai 1 hari sebelum backend
+      // mendukung pecahan. Jika API sudah mengirim 0,5, nilai koreksinya otomatis nol.
+      const legacyHalfDayCorrection = records
+        .filter(record => record.status === 'Disetujui (ACC)' && record.totalDays === 0.5 && record.reportedTotalDays === 1)
+        .length * 0.5;
+      setBalance((leaveBalance.remainingAnnualLeave ?? 0) + legacyHalfDayCorrection);
+      setHistory(records); setHolidayDates(new Set(holidays.map((holiday) => holiday.date))); setError('');
     } catch (err) { setError(err.message || 'Gagal memuat data cuti.'); }
   }, []);
 
@@ -151,7 +157,7 @@ const ApplyCuti = ({ user }) => {
       id: item.id, karyawan: { nama: item.userName || 'Pemohon' }, jenisCuti: item.jenisCuti,
       durasi: `${item.stringTanggal} (${item.totalHari})`, keterangan: item.rawDetail?.reason || '-',
       pendingWork: item.rawDetail?.pendingWork || '-', coveredBy: item.rawDetail?.coveredBy || '-',
-      statusBerkas: item.status === 'Dikembalikan' ? 'DIKEMBALIKAN' : 'PROSES', approvalChain: {}, riwayatLog: [],
+      statusBerkas: item.status === 'Dikembalikan' ? 'DIKEMBALIKAN' : item.status === 'Disetujui (ACC)' ? 'DISETUJUI' : item.status === 'Ditolak' ? 'DITOLAK' : 'PROSES', approvalChain: {}, riwayatLog: [],
     });
     try { setSelectedDetail(mapApproval(await getMyLeaveDetail(item.id), employeeLookup)); }
     catch (err) { setError(err.message || 'Gagal memuat detail cuti.'); }
@@ -190,14 +196,10 @@ const ApplyCuti = ({ user }) => {
       leaveTypes={types} approvers={approvers} isSupervisor={atasan} currentUserRole={userRole} canApplyCuti />
     <LeaveHistory riwayatCuti={history} filterStatus={filterStatus} setFilterStatus={setFilterStatus} handleOpenDetail={handleOpenDetail} handleEditKembali={handleEditKembali} />
     {selectedDetail && (
-  <LeaveDetailModal 
-    selectedDetail={selectedDetail} 
+  <FormCuti
+    data={selectedDetail}
     onClose={() => setSelectedDetail(null)} 
-    currentUserRole={userRole}
-    onRefreshData={load} // Supaya setelah edit/action data otomatis refresh
-    handleEditKembali={handleEditKembali}
-    allHistory={history}
-    employeeLookup={employeeLookup}
+    onEdit={selectedDetail.statusBerkas === 'DIKEMBALIKAN' ? () => handleEditKembali(selectedDetail.id) : null}
   />
 )}
   </div>;

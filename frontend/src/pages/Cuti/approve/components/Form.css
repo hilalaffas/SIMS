@@ -66,7 +66,9 @@
 .form-cuti__log-note { color: #64748b; font-size: 16px; line-height: 1.45; }
 .form-cuti__log-empty { padding: 16px 0; color: #94a3b8; font-size: 14px; text-align: center; }
 
-.form-cuti__footer { display: flex; justify-content: flex-end; padding: 22px 24px; background: #f8fafc; }
+.form-cuti__footer { display: flex; justify-content: flex-end; gap: 10px; padding: 22px 24px; background: #f8fafc; }
+.form-cuti__edit-btn { padding: 12px 20px; border: 1px solid #047857; border-radius: 11px; background: #fff; color: #047857; font-size: 15px; font-weight: 700; cursor: pointer; }
+.form-cuti__edit-btn:hover { background: #ecfdf5; }
 .form-cuti__close-btn { min-width: 141px; padding: 12px 20px; border: 1px solid #64748b; border-radius: 11px; background: #1e293b; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
 .form-cuti__close-btn:hover { background: #334155; }
 

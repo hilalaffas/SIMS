@@ -15,9 +15,7 @@ const dateText = (value) => {
   return isNaN(parsed.getTime()) ? '-' : parsed.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-// [UBAH] Diekspor (sebelumnya cuma internal) supaya bisa dipakai Navbar.jsx
-// untuk format timestamp notifikasi approval per-level.
-export const logDateText = (value) => {
+const logDateText = (value) => {
   if (!value) return '-';
   const parsed = new Date(value);
   if (isNaN(parsed.getTime())) return '-';
@@ -30,14 +28,20 @@ const logStatusLabel = (value) => ({
   PENDING: 'DIAJUKAN', APPROVED: 'DISETUJUI (ACC)', RETURNED: 'DIKEMBALIKAN (RETURN)', REJECTED: 'DITOLAK',
 }[String(value || '').toUpperCase()] || value || '-');
 
-export const getLeaveBalance = () => api.get('/api/cuti/balance/me');
-// [UBAH] Tambah employeeId opsional -- dipakai form Cuti Susulan (HR pilih
-// approver ATAS NAMA karyawan lain, bukan dirinya sendiri). Pemanggilan lama
-// tanpa employeeId (Ajukan Cuti normal) tetap jalan persis seperti sebelumnya.
-export const getApprovers = (role, employeeId) => {
-  const query = employeeId ? `role=${role}&employeeId=${employeeId}` : `role=${role}`;
-  return api.get(`/api/karyawan/approvers?${query}`);
+const normalizedLeaveDays = (item) => {
+  const leaveTypeName = item?.leaveType?.name || item?.leaveType || item?.jenisCuti || '';
+  return String(leaveTypeName).trim().toLowerCase() === 'cuti setengah hari'
+    ? 0.5
+    : Number(item?.totalDays || 0);
 };
+
+const dayText = (value) => Number(value).toLocaleString('id-ID', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+
+export const getLeaveBalance = () => api.get('/api/cuti/balance/me');
+export const getApprovers = (role) => api.get(`/api/karyawan/approvers?role=${role}`);
 export const getLeaveTypes = () => api.get('/api/jenis-cuti');
 
 export async function submitCuti(payload) {
@@ -88,13 +92,17 @@ export function mapMyLeave(item) {
   if (!item) return {};
   const status = item.status?.statusName || item.status || 'PENDING';
   const rawTanggal = `${dateText(item.startDate)} - ${dateText(item.endDate)}`;
+  const totalDays = normalizedLeaveDays(item);
   return {
     id: item.leaveRequestId || item.id,
     userName: item.employee?.fullName || item.employeeName,
     jenisCuti: item.leaveType?.name || 'Cuti',
     stringTanggal: rawTanggal.split('(')[0].trim(),
-    totalHari: `${item.totalDays || 0} Hari`,
+    totalHari: `${dayText(totalDays)} Hari`,
+    totalDays,
+    reportedTotalDays: Number(item.totalDays || 0),
     status: statusLabel(status),
+    statusChangedAt: item.returnedAt || item.approvedAt || item.submittedAt || null,
     rawDetail: { 
       jenisCuti: item.leaveType?.name, 
       startDate: item.startDate, 
@@ -111,11 +119,6 @@ export async function getRiwayatByUser() {
   const res = await api.get('/api/cuti/me');
   return Array.isArray(res) ? res.map(mapMyLeave) : []; 
 }
-
-// [BARU] Riwayat approval per-level (Leader/SPV/Manager) untuk cuti milik
-// sendiri -- dipakai Navbar.jsx untuk notifikasi granular ke pengaju setiap
-// level approve (bukan cuma status akhir keseluruhan).
-export const getMyApprovalTimeline = () => api.get('/api/cuti/me/approval-timeline');
 
 export const getMyLeaveDetail = (id) => api.get(`/api/cuti/${id}/detail`);
 
@@ -152,6 +155,7 @@ export async function getTeamLeaveByYear(year) {
 export function mapApproval(item, employeeLookup = {}) {
   if (!item) return {};
   const logs = Array.isArray(item.approvalLogs) ? item.approvalLogs : [];
+  const totalDays = normalizedLeaveDays(item);
 
   const leaderAssigned = item.leader?.fullName || item.leader?.nama || item.leaderEmployee?.fullName || item.leaderName;
   const spvAssigned = item.spv?.fullName || item.spv?.nama || item.spvEmployee?.fullName || item.spvName;
@@ -180,11 +184,13 @@ export function mapApproval(item, employeeLookup = {}) {
     id: item.leaveRequestId || item.id,
     karyawan: { nama: item.employeeName || item.employee?.fullName || 'Pemohon', kode: `CUTI-${item.leaveRequestId || item.id}`, jabatan: '-' },
     jenisCuti: item.leaveType?.name || item.leaveType || 'Cuti',
-    durasi: `${dateText(item.startDate)} - ${dateText(item.endDate)} (${item.totalDays || 0} Hari)`,
-    totalDays: item.totalDays,
+    durasi: `${dateText(item.startDate)} - ${dateText(item.endDate)} (${dayText(totalDays)} Hari)`,
+    totalDays,
     keterangan: item.reason || '-',
     pendingWork: item.pendingWork || '-',
+    pekerjaanTertunda: item.pendingWork || '-',
     coveredBy: item.coveredBy || '-',
+    dicoverOleh: item.coveredBy || '-',
     statusBerkas: statusCode(item.overallStatus || item.status?.statusName || item.status),
     approvalChain: chain,
     submittedAt: item.submittedAt || null, 
@@ -204,12 +210,13 @@ export function mapApproval(item, employeeLookup = {}) {
 export function mapKaryawanLeave(item) {
   const status = item.status?.statusName || item.status || 'PENDING';
   const hasBeenReviewed = String(status).toUpperCase() !== 'PENDING';
+  const totalDays = normalizedLeaveDays(item);
 
   return {
     id: item.leaveRequestId,
     karyawan: { nama: item.employee?.fullName, kode: item.employee?.nikKaryawan || '-' },
     jenisCuti: item.leaveType?.name || 'Cuti',
-    durasi: `${dateText(item.startDate)} - ${dateText(item.endDate)} (${item.totalDays || 0} Hari)`,
+    durasi: `${dateText(item.startDate)} - ${dateText(item.endDate)} (${dayText(totalDays)} Hari)`,
     statusBerkas: statusCode(status),
     keterangan: item.reason || '-',
     pekerjaanTertunda: item.pendingWork || '-',
@@ -240,5 +247,8 @@ export const getApprovalHistory = async () => {
   return Array.isArray(res) ? res.map(item => mapApproval(item)) : [];
 };
 
-export const getApprovalDetail = (id) => api.get(`/api/cuti/approvals/${id}`);
+export const getApprovalDetail = async (id) => {
+  const res = await api.get(`/api/cuti/approvals/${id}`);
+  return mapApproval(res);
+};
 export const takeApprovalAction = (id, action, note) => api.put(`/api/cuti/${id}/${action}`, { note });

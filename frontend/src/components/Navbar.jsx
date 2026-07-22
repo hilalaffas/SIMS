@@ -1,68 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-// [UBAH] getRiwayatByUser (status akhir saja) diganti getMyApprovalTimeline
-// (per-level Leader/SPV/Manager) supaya notifikasi bisa granular per approve.
-import { getMyApprovalTimeline, getPendingApprovals, logDateText } from '../services/CutiService';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getRiwayatByUser, getPendingApprovals } from '../services/CutiService'; // TAMBAHAN: Mengambil fungsi hit database service yang sama dengan ApplyCuti
 // [BARU] Untuk notifikasi permintaan reset sandi (lonceng HR Admin/Super Admin)
-import { getPendingResetRequests, getPendingResetCount } from '../services/passwordResetService';
+import { getPendingResetRequests } from '../services/passwordResetService';
+import { getAnnouncements } from '../services/announcementService';
+import { getAllHolidays } from '../services/holidayService';
 import { isHrAdmin, isSuperAdmin, isManagerOrSpv } from '../utils/roles';
 import NotifPasswordResetModal from './NotifPasswordResetModal';
 import NotifLeaveApprovalModal from './NotifLeaveApprovalModal'; // [BARU]
 import './Navbar.css'; 
-
-// [BARU] Backend belum punya tabel Notification (status read/unread persisten),
-// jadi untuk notifikasi status cuti milik pengaju sendiri, "sudah dibaca"
-// disimpan sementara di localStorage per user (key = username, satu-satunya
-// identifier stabil yang ada di object user saat ini -- lihat authService.js).
-// Supaya begitu ditandai dibaca, notif yang sama tidak muncul lagi terus.
-const SEEN_NOTIF_PREFIX = 'sims_seen_leave_notif_';
-
-function getSeenLeaveNotifIds(userKey) {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(`${SEEN_NOTIF_PREFIX}${userKey}`) || '[]'));
-  } catch {
-    return new Set();
-  }
-}
-
-function markLeaveNotifSeen(userKey, seenKeys) {
-  if (!seenKeys || seenKeys.length === 0) return;
-  const current = getSeenLeaveNotifIds(userKey);
-  seenKeys.forEach((key) => current.add(key));
-  try {
-    localStorage.setItem(`${SEEN_NOTIF_PREFIX}${userKey}`, JSON.stringify([...current]));
-  } catch {
-    // localStorage penuh/diblokir browser -- notifikasi tetap tampil normal, cuma tidak persist
-  }
-}
-
-// [UBAH] Sebelumnya cuma 1 notif per status akhir (approved/rejected/returned).
-// Sekarang per-LEVEL: setiap kali Leader/SPV/Manager approve, pengaju dapat
-// notif sendiri-sendiri -- teksnya otomatis beda tergantung siapa yang approve
-// (dan Manager, karena selalu level terakhir di alur SIMS, jadi notif finalnya
-// "Cuti Anda disetujui"). Reject/Return tetap 1 notif (langsung hentikan alur).
-const ROLE_LABEL = { LEADER: 'Leader', SPV: 'SPV', MANAGER: 'Manager' };
-
-function buildLeaveStepNotifText(role, approverName, action, jenis) {
-  const roleLabel = ROLE_LABEL[role] || role;
-  const name = approverName || 'Approver';
-
-  if (action === 'APPROVED') {
-    if (role === 'MANAGER') {
-      // Manager = approver level terakhir (BRD 4.4) -> ini notif final "disetujui".
-      return <><strong>{name}</strong> ({roleLabel}) telah menyetujui cuti <strong>{jenis}</strong> Anda. Cuti Anda <strong>disetujui.</strong></>;
-    }
-    const nextRole = role === 'LEADER' ? 'SPV' : 'Manager';
-    return <><strong>{name}</strong> ({roleLabel}) telah menyetujui cuti <strong>{jenis}</strong> Anda. Menunggu persetujuan {nextRole}.</>;
-  }
-  if (action === 'REJECTED') {
-    return <><strong>{name}</strong> ({roleLabel}) menolak pengajuan cuti <strong>{jenis}</strong> Anda.</>;
-  }
-  if (action === 'RETURNED') {
-    return <><strong>{name}</strong> ({roleLabel}) mengembalikan pengajuan cuti <strong>{jenis}</strong> Anda untuk diperbaiki.</>;
-  }
-  return null;
-}
 
 // Tambahkan parameter object user untuk mengambil id data dari database/API
 export default function Navbar({ toggleSidebar, user }) {
@@ -73,6 +19,8 @@ export default function Navbar({ toggleSidebar, user }) {
   // === BAGIAN TAMBAHAN NOTIFIKASI REAL-TIME DARI DATABASE (START) ===
   const [showDropdown, setShowDropdown] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [announcementNotifications, setAnnouncementNotifications] = useState([]);
+  const [holidayNotifications, setHolidayNotifications] = useState([]);
 
   // [BARU] Notifikasi permintaan reset sandi -- terpisah dari notifikasi cuti
   // di atas karena sumber datanya beda (tabel password_reset_requests, bukan
@@ -96,83 +44,155 @@ export default function Navbar({ toggleSidebar, user }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // Normalisasi data user role
-  // [UBAH] user.id TIDAK PERNAH ada di object user hasil login (lihat
-  // authService.js -- cuma { username, role, name }), jadi userId di sini
-  // selalu 'guest' dan bikin notifikasi status cuti pengaju tidak pernah
-  // muncul. Diganti ke username, satu-satunya identifier stabil yang ada.
-  const userKey = user?.username ?? 'guest';
-  const userName = user?.nama || user?.name || 'Karyawan';
+  const userRole = (user?.jabatan || user?.role || 'Karyawan').toLowerCase();
+  // Data login yang diteruskan App berisi name/username, bukan employee id.
+  // Gunakan identitas ini agar fetch notifikasi tidak salah dianggap sebagai guest.
+  const notificationOwner = user?.username || user?.name || user?.nama || 'guest';
+  const notificationStorageKey = `read-leave-status-notifications:${notificationOwner}`;
+  const [readRefreshToken, setReadRefreshToken] = useState(0);
+  const readNotificationIds = (() => {
+    // Token berubah setelah tombol dibaca ditekan, sehingga storage dibaca ulang.
+    void readRefreshToken;
+    try {
+      const savedIds = JSON.parse(localStorage.getItem(notificationStorageKey) || '[]');
+      return Array.isArray(savedIds) ? savedIds : [];
+    } catch {
+      return [];
+    }
+  })();
+  const lastNotificationReadAt = Number(
+    localStorage.getItem(`${notificationStorageKey}:read-at`) || 0
+  );
 
   useEffect(() => {
+    if (notificationOwner === 'guest') return undefined;
+
+    let isMounted = true;
+
     const fetchNotificationFromDB = async () => {
       try {
-        // [UBAH] Sebelumnya pakai getRiwayatByUser() yang cuma kasih status
-        // AKHIR (approved/rejected/returned/pending) per cuti -- tidak bisa
-        // tahu Leader sudah approve tapi SPV belum, dsb. Sekarang pakai
-        // getMyApprovalTimeline() yang isinya approvalLogs per-level
-        // (Leader/SPV/Manager), supaya bisa kasih notif setiap kali SATU
-        // level approve -- bukan cuma sekali di akhir.
-        const rawData = await getMyApprovalTimeline();
+        // Ambil data riwayat cuti dari API/Database
+        const rawData = await getRiwayatByUser();
 
-        if (!rawData || rawData.length === 0) {
-          setNotifications([]);
-          return;
-        }
-
-        const seenIds = getSeenLeaveNotifIds(userKey);
         const mappedNotifications = [];
 
-        rawData.forEach((item) => {
-          const jenisCutiNama = item.leaveType || 'Cuti';
+        (rawData || []).forEach((item) => {
+          const statusBerkas = item.status ? item.status.toLowerCase() : 'proses';
+          const jenisCutiNama = item.rawDetail?.jenisCuti || item.jenisCuti || 'Cuti tahunan';
+          const stringTanggal = item.stringTanggal || 'Tanggal tidak tersedia';
+          const pemohon = item.userName || 'Karyawan';
 
-          (item.approvalLogs || []).forEach((log) => {
-            // PENDING (belum diproses level ini) tidak menghasilkan notif.
-            if (!['APPROVED', 'REJECTED', 'RETURNED'].includes(log.action)) return;
-
-            // [BARU] seenKey sekarang per-LEVEL (leaveRequestId + role + action),
-            // bukan cuma per-cuti -- supaya notif "Leader approve" & "Manager
-            // approve" pada cuti yang SAMA dianggap 2 notif terpisah, bukan 1.
-            const seenKey = `${item.leaveRequestId}-${log.approverRole}-${log.action}`;
-            if (seenIds.has(seenKey)) return;
-
-            const text = buildLeaveStepNotifText(log.approverRole, log.approverName, log.action, jenisCutiNama);
-            if (!text) return;
-
-            // Type dipakai untuk ikon & hint klik -- direuse dari 3 tipe yang
-            // sudah ada (approved/rejected/returned), teks yang membedakan
-            // apakah itu approval per-level atau approval final.
-            const notifType = log.action === 'APPROVED' ? 'approved' : log.action === 'REJECTED' ? 'rejected' : 'returned';
-
+          // Endpoint /api/cuti/me sudah dibatasi backend hanya untuk pemohon
+          // yang sedang login, sehingga semua item di sini adalah milik user ini.
+          if (statusBerkas.includes('kembali') || statusBerkas.includes('return')) {
+            const notificationId = `ret-${item.id}`;
             mappedNotifications.push({
-              id: seenKey,
-              seenKey,
-              text,
-              date: logDateText(log.actedAt),
-              type: notifType,
-              rawDate: log.actedAt,
+              id: notificationId,
+              text: <>Pengajuan <strong>{jenisCutiNama}</strong> Anda telah <strong>dikembalikan.</strong></>,
+              date: stringTanggal,
+              timestamp: item.statusChangedAt,
+              type: "returned"
             });
-          });
+          } else if (statusBerkas.includes('setuju') || statusBerkas.includes('acc')) {
+            const notificationId = `app-${item.id}`;
+            mappedNotifications.push({
+              id: notificationId,
+              text: <>Pengajuan <strong>{jenisCutiNama}</strong> Anda telah <strong>disetujui.</strong></>,
+              date: stringTanggal,
+              timestamp: item.statusChangedAt,
+              type: "approved"
+            });
+          } else if (statusBerkas.includes('tolak') || statusBerkas.includes('reject')) {
+            const notificationId = `rej-${item.id}`;
+            mappedNotifications.push({
+              id: notificationId,
+              text: <>Pengajuan <strong>{jenisCutiNama}</strong> Anda telah <strong>ditolak.</strong></>,
+              date: stringTanggal,
+              timestamp: item.statusChangedAt,
+              type: "rejected"
+            });
+          }
 
-          // Catatan: notifikasi "ada pengajuan baru masuk" untuk atasan
-          // (Leader/SPV/Manager) TIDAK ditangani di loop ini -- itu sepenuhnya
-          // ditangani mekanisme leaveApprovalTasks di bawah (sumbernya
-          // /api/cuti/approvals/my-task, sudah scoped per approver).
+          // 2. Logika untuk Atasan (Leader, SPV, Manager menerima notifikasi adanya pengajuan baru masuk)
+          const isAtasanLeader = userRole.includes('leader') && item.rawDetail?.leader?.status?.toLowerCase() === 'pending';
+          const isAtasanSPV = userRole.includes('spv') && item.rawDetail?.spv?.status?.toLowerCase() === 'pending';
+          const isAtasanManager = userRole.includes('manager') && item.rawDetail?.manager?.status?.toLowerCase() === 'pending';
+
+          if (isAtasanLeader || isAtasanSPV || isAtasanManager) {
+            mappedNotifications.push({
+              id: `new-${item.id}`,
+              text: <>Ada pengajuan <strong>{jenisCutiNama}</strong> baru dari Karyawan ({pemohon}) menunggu persetujuan Anda.</>,
+              date: stringTanggal,
+              type: "new"
+            });
+          }
         });
 
-        // Notifikasi terbaru di atas
-        mappedNotifications.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
-
-        setNotifications(mappedNotifications);
+        if (isMounted) setNotifications(mappedNotifications);
       } catch (error) {
         console.error("Gagal memuat data notifikasi dari API:", error);
       }
     };
 
-    if (userKey !== 'guest') {
-      fetchNotificationFromDB();
-    }
-  }, [userKey, showDropdown]); // Berjalan otomatis setiap kali identitas user berubah atau dropdown dibuka
+    fetchNotificationFromDB();
+    const intervalId = window.setInterval(fetchNotificationFromDB, 30000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [notificationOwner, notificationStorageKey, userRole, showDropdown]);
   // === BAGIAN TAMBAHAN NOTIFIKASI REAL-TIME DARI DATABASE (END) ===
+
+  // Pengumuman/portal berita dan penambahan hari libur tersedia untuk semua
+  // akun yang sudah login dan memakai aturan baca lonceng yang sama.
+  useEffect(() => {
+    if (notificationOwner === 'guest') return undefined;
+
+    let isMounted = true;
+    const fetchCompanyInformation = async () => {
+      const [announcementsResult, holidaysResult] = await Promise.allSettled([
+        getAnnouncements(),
+        getAllHolidays(),
+      ]);
+
+      if (!isMounted) return;
+
+      if (announcementsResult.status === 'fulfilled') {
+        setAnnouncementNotifications((announcementsResult.value || []).map((item) => {
+          const timestamp = item.updatedAt || item.createdAt;
+          return {
+            id: `news-${item.id}-${timestamp ? new Date(timestamp).getTime() : item.id}`,
+            text: <><strong>Pengumuman/berita baru:</strong> {item.judul}</>,
+            date: timestamp
+              ? new Date(timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+              : '-',
+            timestamp,
+            type: 'announcement',
+          };
+        }));
+      }
+
+      if (holidaysResult.status === 'fulfilled') {
+        setHolidayNotifications((holidaysResult.value || []).map((item) => ({
+          id: `holiday-${item.holidayId}`,
+          text: <><strong>Hari libur baru:</strong> {item.name}</>,
+          date: item.date
+            ? new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+            : '-',
+          timestamp: item.createdAt,
+          type: 'holiday',
+        })));
+      }
+    };
+
+    fetchCompanyInformation();
+    const intervalId = window.setInterval(fetchCompanyInformation, 30000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [notificationOwner]);
 
   // === [BARU] NOTIFIKASI PERMINTAAN RESET SANDI (HR ADMIN / SUPER ADMIN) ===
   useEffect(() => {
@@ -216,6 +236,7 @@ export default function Navbar({ toggleSidebar, user }) {
         })
       : '-',
     type: 'password-reset',
+    timestamp: req.requestedAt,
     raw: req,
   }));
 
@@ -268,6 +289,7 @@ export default function Navbar({ toggleSidebar, user }) {
         })
       : '-',
     type: 'leave-approval',
+    timestamp: task.submittedAt,
     raw: task,
   }));
 
@@ -281,22 +303,46 @@ export default function Navbar({ toggleSidebar, user }) {
   };
   // === [BARU] AKHIR BAGIAN NOTIFIKASI CUTI PERLU DIPROSES ===
 
-  // Gabungan SEMUA jenis notifikasi jadi satu daftar/satu badge angka.
-  const allNotifications = [...leaveApprovalNotifications, ...resetNotifications, ...notifications];
+  // Semua event setelah waktu terakhir dibaca tetap ditampilkan dan dihitung.
+  // Jadi badge bertambah 1, 2, 3, ... sampai pengguna menandai semuanya dibaca.
+  const getNotificationTime = (notification) => {
+    const parsedTime = notification.timestamp
+      ? new Date(notification.timestamp).getTime()
+      : Number.NaN;
+    return Number.isNaN(parsedTime)
+      ? Number(notification.id.split('-').pop()) || 0
+      : parsedTime;
+  };
+  const allNotificationCandidates = [
+    ...announcementNotifications,
+    ...holidayNotifications,
+    ...leaveApprovalNotifications,
+    ...resetNotifications,
+    ...notifications,
+  ];
+  const allNotifications = allNotificationCandidates
+    .filter((notification) => (
+      !readNotificationIds.includes(notification.id)
+      && getNotificationTime(notification) > lastNotificationReadAt
+    ))
+    .sort((first, second) => getNotificationTime(second) - getNotificationTime(first));
 
   const handleNotifClick = (notif) => {
     if (notif.type === 'password-reset') {
       setSelectedResetNotif(notif.raw);
     } else if (notif.type === 'leave-approval') {
       setSelectedLeaveNotif(notif.raw);
-    } else if (['approved', 'rejected', 'returned'].includes(notif.type)) {
-      // [BARU] Klik notifikasi status cuti sendiri -> tandai sudah dibaca
-      // (tidak muncul lagi) & langsung ke halaman Cuti Saya.
-      markLeaveNotifSeen(userKey, [notif.seenKey]);
-      setNotifications((prev) => prev.filter((n) => n.seenKey !== notif.seenKey));
-      setShowDropdown(false);
-      navigate('/ApplyCuti');
     }
+  };
+
+  const handleMarkNotificationsRead = () => {
+    const visibleNotificationIds = allNotifications.map((notification) => notification.id);
+    const updatedIds = [...new Set([...readNotificationIds, ...visibleNotificationIds])];
+
+    localStorage.setItem(notificationStorageKey, JSON.stringify(updatedIds));
+    localStorage.setItem(`${notificationStorageKey}:read-at`, String(Date.now()));
+    setReadRefreshToken((current) => current + 1);
+    setNotifications([]);
   };
 
   // Effect untuk meng-update tanggal secara otomatis dalam format Indonesia & Deteksi ukuran layar
@@ -375,18 +421,7 @@ export default function Navbar({ toggleSidebar, user }) {
             <div className="notification-dropdown">
               <div className="notification-header">
                 <span className="notification-header-title">Notifikasi Terbaru</span>
-                <button
-                  className="btn-mark-read"
-                  onClick={() => {
-                    // [UBAH] Sebelumnya cuma setNotifications([]) -- hilang lagi
-                    // begitu dropdown dibuka ulang (langsung fetch ulang & muncul
-                    // lagi). Sekarang benar-benar dipersist ke localStorage.
-                    markLeaveNotifSeen(userKey, notifications.map((n) => n.seenKey));
-                    setNotifications([]);
-                  }}
-                >
-                  Tandai dibaca
-                </button>
+                <button className="btn-mark-read" onClick={handleMarkNotificationsRead}>Tandai dibaca</button>
               </div>
               <ul className="notification-list">
                 {allNotifications.length === 0 ? (
@@ -397,7 +432,7 @@ export default function Navbar({ toggleSidebar, user }) {
                       key={notif.id}
                       className="notification-item"
                       onClick={() => handleNotifClick(notif)}
-                      style={['password-reset', 'leave-approval', 'approved', 'rejected', 'returned'].includes(notif.type) ? { cursor: 'pointer' } : undefined}
+                      style={['password-reset', 'leave-approval'].includes(notif.type) ? { cursor: 'pointer' } : undefined}
                     >
                       <div className="notification-icon-wrapper">
                         {notif.type === 'returned' && (
@@ -412,11 +447,10 @@ export default function Navbar({ toggleSidebar, user }) {
                             <path d="M8 12l3 3 5-5" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         )}
-                        {/* [BARU] Ikon khusus notifikasi cuti ditolak, sebelumnya tidak pernah ada */}
                         {notif.type === 'rejected' && (
                           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-rejected">
                             <circle cx="12" cy="12" r="10" stroke="#ef4444" strokeWidth="2" fill="none"/>
-                            <path d="M9 9l6 6m0-6l-6 6" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/>
+                            <path d="M8.5 8.5l7 7m0-7l-7 7" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/>
                           </svg>
                         )}
                         {notif.type === 'new' && (
@@ -441,6 +475,19 @@ export default function Navbar({ toggleSidebar, user }) {
                             <circle cx="12" cy="14.5" r="1.6" fill="#0284c7"/>
                           </svg>
                         )}
+                        {notif.type === 'announcement' && (
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-announcement">
+                            <path d="M4 11v2a2 2 0 0 0 2 2h2l2 4h3l-2-4 7-3V6l-10 4H6a2 2 0 0 0-2 1Z" stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round"/>
+                            <path d="M18 8.5c1 .5 1 2.5 0 3" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        )}
+                        {notif.type === 'holiday' && (
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-holiday">
+                            <rect x="3" y="5" width="18" height="16" rx="2" stroke="#f97316" strokeWidth="2"/>
+                            <path d="M3 10h18M8 3v4M16 3v4" stroke="#f97316" strokeWidth="2" strokeLinecap="round"/>
+                            <path d="m9 15 2 2 4-4" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
                       </div>
 
                       <div className="notification-content">
@@ -451,10 +498,6 @@ export default function Navbar({ toggleSidebar, user }) {
                         )}
                         {notif.type === 'leave-approval' && (
                           <span className="notification-action-hint notification-action-hint_leave">Klik untuk memproses →</span>
-                        )}
-                        {/* [BARU] Hint klik untuk notif status cuti sendiri (approved/rejected/returned) */}
-                        {['approved', 'rejected', 'returned'].includes(notif.type) && (
-                          <span className="notification-action-hint">Klik untuk lihat →</span>
                         )}
                       </div>
                     </li>

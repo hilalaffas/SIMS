@@ -4,6 +4,7 @@ import { BrowserRouter, useNavigate } from 'react-router-dom';
 import AppRoutes from './routes/AppRoutes';
 import Toast from './components/Toast';
 import LogoutModal from './components/LogoutModal';
+import { logoutUser } from './services/authService';
 
 import './App.css'; 
 
@@ -74,8 +75,13 @@ const AppContent = () => {
   };
 
   const handleConfirmLogout = () => {
-    // Bersihkan storage dan kembalikan state user ke mode Guest
-    localStorage.clear();
+    // Bersihkan hanya data sesi login. Jangan memakai localStorage.clear()
+    // karena status notifikasi yang sudah dibaca harus tetap tersimpan saat
+    // pengguna login kembali.
+    logoutUser();
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_avatar_url');
     setCurrentUser({ name: 'Guest', role: 'Guest' });
     setIsLogoutModalOpen(false);
     

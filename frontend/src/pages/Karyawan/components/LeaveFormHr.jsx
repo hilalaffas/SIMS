@@ -18,74 +18,36 @@ const initialFormState = {
 
 const LeaveFormHr = ({ karyawanList, onSubmit }) => {
   const [formData, setFormData] = useState(initialFormState);
+  // [BARU] Data pendukung form (jenis cuti & daftar approver) sekarang
+  // diambil dari backend asli, bukan opsi statis lagi.
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaderOptions, setLeaderOptions] = useState([]);
   const [spvOptions, setSpvOptions] = useState([]);
   const [managerOptions, setManagerOptions] = useState([]);
-  // [BARU] Loading approver terpisah dari isSubmitting, supaya bisa kasih
-  // feedback "Memuat approver..." tiap kali ganti karyawan.
-  const [isLoadingApprovers, setIsLoadingApprovers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Jenis cuti tidak tergantung karyawan yang dipilih -> cukup diambil sekali di awal.
   useEffect(() => {
     (async () => {
       try {
-        const types = await getLeaveTypes();
-        setLeaveTypes(types || []);
-      } catch (error) {
-        console.error('Gagal memuat jenis cuti:', error);
-      }
-    })();
-  }, []);
-
-  // [UBAH] Approver (Leader/SPV/Manager) WAJIB satu divisi dengan karyawan
-  // yang dipilih HR (bukan divisi HR yang login) -- jadi daftar approver
-  // sekarang di-refetch setiap kali "karyawanId" berubah, dengan mengirim
-  // employeeId supaya backend tahu divisi acuannya. Sebelumnya endpoint ini
-  // dipanggil sekali di awal TANPA employeeId, jadi yang muncul malah
-  // approver satu divisi dengan HR sendiri -> submit selalu gagal ("Approver
-  // harus berasal dari divisi yang sama dengan pemohon") kecuali kebetulan
-  // HR & karyawan target ada di divisi yang sama.
-  useEffect(() => {
-    if (!formData.karyawanId) {
-      setLeaderOptions([]);
-      setSpvOptions([]);
-      setManagerOptions([]);
-      return;
-    }
-
-    let isCancelled = false;
-    (async () => {
-      setIsLoadingApprovers(true);
-      try {
-        const [leaders, spvs, managers] = await Promise.all([
-          getApprovers('LEADER', formData.karyawanId),
-          getApprovers('SPV', formData.karyawanId),
-          getApprovers('MANAGER', formData.karyawanId),
+        const [types, leaders, spvs, managers] = await Promise.all([
+          getLeaveTypes(),
+          getApprovers('LEADER'),
+          getApprovers('SPV'),
+          getApprovers('MANAGER'),
         ]);
-        if (isCancelled) return;
+        setLeaveTypes(types || []);
         setLeaderOptions(leaders || []);
         setSpvOptions(spvs || []);
         setManagerOptions(managers || []);
       } catch (error) {
-        if (isCancelled) return;
-        console.error('Gagal memuat daftar approver untuk karyawan ini:', error);
-        setLeaderOptions([]);
-        setSpvOptions([]);
-        setManagerOptions([]);
-        setErrorMessage('Karyawan ini belum punya divisi, atau tidak ada approver satu divisi. Hubungi Super Admin untuk melengkapi data divisi.');
-      } finally {
-        if (!isCancelled) setIsLoadingApprovers(false);
+        console.error('Gagal memuat data pendukung form cuti susulan:', error);
       }
     })();
+  }, []);
 
-    return () => { isCancelled = true; };
-  }, [formData.karyawanId]);
-
-  // Kalau karyawan yang dipilih sendiri berperan Leader/SPV/Manager, cukup
-  // pilih approver Manager saja — disamakan dengan aturan backend di
+  // [BARU] Kalau karyawan yang dipilih sendiri berperan Leader/SPV/Manager,
+  // cukup pilih approver Manager saja — disamakan dengan aturan backend di
   // LeaveService.createApprovalStepsAutoApproved (dan alur Ajukan Cuti biasa).
   const selectedKaryawan = useMemo(
     () => karyawanList?.find((k) => String(k.employeeId || k.id) === String(formData.karyawanId)),
@@ -95,15 +57,7 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => {
-      // [BARU] Ganti karyawan -> reset pilihan Leader/SPV/Manager lama,
-      // karena approver dari karyawan sebelumnya belum tentu valid (beda divisi).
-      if (name === 'karyawanId') {
-        return { ...prev, karyawanId: value, leaderEmployeeId: '', spvEmployeeId: '', managerEmployeeId: '' };
-      }
-      return { ...prev, [name]: value };
-    });
-    setErrorMessage('');
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -121,9 +75,10 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
 
     setIsSubmitting(true);
     try {
-      // Submit langsung ke backend (POST /api/cuti/urgent). Endpoint ini
-      // otomatis auto-ACC di sisi server, khusus untuk role HR Admin/Super Admin.
-      const created = await submitUrgentCuti({
+      // [UBAH] Submit langsung ke backend (POST /api/cuti/urgent), bukan lagi
+      // console.log + state lokal. Endpoint ini otomatis auto-ACC di sisi
+      // server, khusus untuk role HR Admin/Super Admin.
+      await submitUrgentCuti({
         karyawanId: formData.karyawanId,
         leaveTypeId: formData.leaveTypeId,
         startDate: formData.startDate,
@@ -137,9 +92,7 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
       });
 
       setFormData(initialFormState);
-      // [UBAH] leaveRequestId diteruskan lagi ke parent (sempat hilang saat
-      // merge) supaya Karyawan.jsx bisa buka langsung modal Detail dari toast sukses.
-      if (onSubmit) onSubmit({ karyawanNama: selectedKaryawan?.fullName, leaveRequestId: created?.leaveRequestId });
+      if (onSubmit) onSubmit({ karyawanNama: selectedKaryawan?.fullName });
     } catch (error) {
       setErrorMessage(error?.message || 'Gagal memproses cuti susulan. Coba lagi.');
     } finally {
@@ -205,54 +158,40 @@ const LeaveFormHr = ({ karyawanList, onSubmit }) => {
 
         <div className="form-group_leaveFormHr mt-4">
           <label>PILIH ALUR APPROVAL (UNTUK CATATAN) *</label>
-
-          {/* [BARU] Panduan supaya HR pilih karyawan dulu sebelum approver muncul */}
-          {!formData.karyawanId && (
-            <p className="info-box_leaveFormHr" style={{ marginTop: 8 }}>
-              Pilih karyawan terlebih dahulu — daftar Leader/SPV/Manager mengikuti divisi karyawan tersebut.
-            </p>
-          )}
-          {formData.karyawanId && isLoadingApprovers && (
-            <p className="info-box_leaveFormHr" style={{ marginTop: 8 }}>Memuat daftar approver...</p>
-          )}
-
-          {formData.karyawanId && !isLoadingApprovers && (
-            <div className="form-grid-3_leaveFormHr">
-              {!selectedIsApproverLevel && (
-                <>
-                  <div className="sub-group_leaveFormHr">
-                    <span className="sub-label_leaveFormHr">Leader</span>
-                    <select name="leaderEmployeeId" value={formData.leaderEmployeeId} onChange={handleInputChange}>
-                      <option value="">Pilih...</option>
-                      {leaderOptions.map((a) => (
-                        <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="sub-group_leaveFormHr">
-                    <span className="sub-label_leaveFormHr">SPV</span>
-                    <select name="spvEmployeeId" value={formData.spvEmployeeId} onChange={handleInputChange}>
-                      <option value="">Pilih...</option>
-                      {spvOptions.map((a) => (
-                        <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-              <div className="sub-group_leaveFormHr">
-                <span className="sub-label_leaveFormHr">Manager</span>
-                <select name="managerEmployeeId" value={formData.managerEmployeeId} onChange={handleInputChange}>
-                  <option value="">Pilih...</option>
-                  {managerOptions.map((a) => (
-                    <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
-                  ))}
-                </select>
-              </div>
+          <div className="form-grid-3_leaveFormHr">
+            {!selectedIsApproverLevel && (
+              <>
+                <div className="sub-group_leaveFormHr">
+                  <span className="sub-label_leaveFormHr">Leader</span>
+                  <select name="leaderEmployeeId" value={formData.leaderEmployeeId} onChange={handleInputChange}>
+                    <option value="">Pilih...</option>
+                    {leaderOptions.map((a) => (
+                      <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sub-group_leaveFormHr">
+                  <span className="sub-label_leaveFormHr">SPV</span>
+                  <select name="spvEmployeeId" value={formData.spvEmployeeId} onChange={handleInputChange}>
+                    <option value="">Pilih...</option>
+                    {spvOptions.map((a) => (
+                      <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+            <div className="sub-group_leaveFormHr">
+              <span className="sub-label_leaveFormHr">Manager</span>
+              <select name="managerEmployeeId" value={formData.managerEmployeeId} onChange={handleInputChange}>
+                <option value="">Pilih...</option>
+                {managerOptions.map((a) => (
+                  <option key={a.employeeId} value={a.employeeId}>{a.fullName}</option>
+                ))}
+              </select>
             </div>
-          )}
-
-          {formData.karyawanId && selectedIsApproverLevel && (
+          </div>
+          {selectedIsApproverLevel && (
             <p className="info-box_leaveFormHr" style={{ marginTop: 8 }}>
               Karyawan ini berperan sebagai Leader/SPV/Manager, jadi cukup pilih Manager (peer review) saja.
             </p>

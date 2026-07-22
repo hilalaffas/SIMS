@@ -177,13 +177,9 @@ public class SecurityConfig {
                                 "/api/cuti/me")
                         .authenticated()
 
-                        // [BARU] Endpoint exact-match ini HARUS ditaruh sebelum
-                        // "/api/cuti/**" di bawah -- kalau tidak, request akan
-                        // ketiban rule wildcard yang mensyaratkan role approver
-                        // (LEADER/SPV/MANAGER/HR/Admin), padahal ini dipakai
-                        // Member biasa untuk lihat riwayat approval cuti sendiri.
+                        // Detail berkas milik pemohon harus dapat dibuka oleh role MEMBER/KARYAWAN.
                         .requestMatchers(HttpMethod.GET,
-                                "/api/cuti/me/approval-timeline")
+                                "/api/cuti/*/detail")
                         .authenticated()
 
                         .requestMatchers(HttpMethod.GET,

@@ -1,5 +1,6 @@
 package sys.hris.sims.leave.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -57,7 +58,7 @@ public class LeaveRequest {
     private LocalDate endDate;
 
     @Column(name = "total_days", nullable = false)
-    private Integer totalDays;
+    private BigDecimal totalDays;
 
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;

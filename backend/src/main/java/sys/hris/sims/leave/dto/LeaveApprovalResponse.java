@@ -1,6 +1,8 @@
 package sys.hris.sims.leave.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -14,7 +16,7 @@ public class LeaveApprovalResponse {
     private String leaveType;
     private LocalDate startDate;
     private LocalDate endDate;
-    private Integer totalDays;
+    private BigDecimal totalDays;
     private String reason;
     private String pendingWork;
     private String coveredBy;
@@ -24,6 +26,7 @@ public class LeaveApprovalResponse {
     private String spvName;
     private Long managerEmployeeId;
     private String managerName;
+    private LocalDateTime submittedAt;
     private String overallStatus;
     private String myApprovalStatus;
     private String reviewNote;

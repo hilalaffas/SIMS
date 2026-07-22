@@ -3,7 +3,7 @@ import './Form.css';
 
 const STATUS_LABEL = { PROSES: 'DALAM PROSES', DISETUJUI: 'DISETUJUI', DIKEMBALIKAN: 'DIKEMBALIKAN', DITOLAK: 'DITOLAK' };
 
-const FormCuti = ({ data, onClose }) => {
+const FormCuti = ({ data, onClose, onEdit = null }) => {
   useEffect(() => {
     const onKeyDown = (event) => event.key === 'Escape' && onClose();
     document.addEventListener('keydown', onKeyDown);
@@ -44,7 +44,10 @@ const FormCuti = ({ data, onClose }) => {
             </div>
           </section>
         </div>
-        <footer className="form-cuti__footer"><button type="button" className="form-cuti__close-btn" onClick={onClose}>Tutup Detail</button></footer>
+        <footer className="form-cuti__footer">
+          {onEdit && <button type="button" className="form-cuti__edit-btn" onClick={() => { onEdit(); onClose(); }}>Edit Berkas</button>}
+          <button type="button" className="form-cuti__close-btn" onClick={onClose}>Tutup Detail</button>
+        </footer>
       </section>
     </div>
   );

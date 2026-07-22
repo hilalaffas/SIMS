@@ -24,18 +24,10 @@
   font-weight: 600; /* font-semibold */
   color: #ffffff; /* text-white */
   display: flex;
-  flex-direction: column; /* [UBAH] supaya muat baris "Detail" di bawah pesan */
-  align-items: flex-start;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.5rem; /* gap-2 */
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1); /* transition-all */
   /* animation: toast-bounce 1s infinite; /* animate-bounce */
-}
-
-/* [BARU] Baris pertama: ikon + pesan (tampilan persis seperti toast-base lama) */
-.toast-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .toast-success {
@@ -49,29 +41,4 @@
 .toast-icon {
   width: 1.25rem; /* w-5 */
   height: 1.25rem; /* h-5 */
-}
-
-/* [BARU] Link "Detail" di bawah pesan toast */
-.toast-action {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: 1.75rem; /* sejajar dengan teks pesan (lebar ikon + gap baris atas) */
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.toast-action-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.85);
-  display: inline-block;
-  flex-shrink: 0;
 }

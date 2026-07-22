@@ -14,7 +14,7 @@ const STATUS_LABEL = {
   'REJECTED': "Ditolak",
 };
 
-const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshData, allHistory = [], employeeLookup = {} }) => {
+const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshData, allHistory = [], employeeLookup = {}, handleEditKembali }) => {
   const [detailData, setDetailData] = useState(selectedDetail);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -60,31 +60,75 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
 
   if (!detailData) return null;
 
-  const statusKey = (detailData.statusBerkas || 'PROSES').toUpperCase();
-  const statusTercetak = STATUS_LABEL[statusKey] || detailData.statusBerkas || "Proses";
+  // Normalisasi data kompatibilitas
+  const pemohon = detailData.karyawan?.nama || detailData.pemohon || 'Karyawan';
+  const jenisCuti = detailData.jenisCuti;
+  const durasi = detailData.durasi || detailData.stringTanggal;
+  const statusKey = (detailData.statusBerkas || detailData.globalStatus || 'PROSES').toUpperCase();
+  const statusTercetak = STATUS_LABEL[statusKey] || detailData.statusBerkas || detailData.globalStatus || "Proses";
+
+  const leaderName = detailData.approvalChain?.leader || detailData.leader?.nama || detailData.leaderApproval || '-';
+  const spvName = detailData.approvalChain?.spv || detailData.spv?.nama || detailData.spvApproval || '-';
+  const managerName = detailData.approvalChain?.manager || detailData.manager?.nama || detailData.managerApproval || '-';
+
+  const alasan = detailData.keterangan || detailData.alasan || '-';
+  const pekerjaanTertunda = detailData.pendingWork || detailData.pekerjaanTertunda || '';
+  const coverOleh = detailData.coveredBy || detailData.coverOleh || '';
 
   // =========================================================================
-  // LOGIKA MENDAPATKAN TOTAL DURASI HARI CUTI
+  // LOGIKA TAMBAHAN: GENERATE LOG DINAMIS SEBAGAI FALLBACK
   // =========================================================================
-  const getFormattedDuration = () => {
-    // 1. Cek dari field totalDays atau totalHari
-    const totalDaysNum = detailData.totalDays || detailData.totalHari;
-    if (totalDaysNum) {
-      return `${totalDaysNum} Hari`;
-    }
-
-    // 2. Jika berbentuk string durasi seperti "20 Jan 2026 - 22 Jan 2026 (3 Hari)"
-    if (detailData.durasi && detailData.durasi.includes('(')) {
-      const extracted = detailData.durasi.match(/\(([^)]+)\)/);
-      if (extracted && extracted[1]) {
-        return extracted[1]; // Mengambil teks dalam kurung, misal "3 Hari"
+  const generateDynamicLogs = () => {
+    const logs = [
+      {
+        nama: pemohon,
+        tanggal: durasi.split('(')[0].trim(),
+        aksi: 'DIAJUKAN',
+        catatan: 'Mengajukan awal'
       }
+    ];
+
+    const leaderStatus = detailData.leader?.status || (detailData.leaderApproval ? 'Approved' : null);
+    if (leaderName && leaderName !== '-' && leaderStatus && leaderStatus !== 'Pending') {
+      logs.push({
+        nama: `${leaderName} (Leader)`,
+        tanggal: durasi.split('(')[0].trim(),
+        aksi: leaderStatus.toUpperCase(),
+        catatan: leaderStatus.toLowerCase() === 'approved' ? 'Meneruskan ke SPV' : 'Menolak berkas'
+      });
     }
 
-    return '-';
+    const spvStatus = detailData.spv?.status || (detailData.spvApproval ? 'Approved' : null);
+    if (spvName && spvName !== '-' && spvStatus && spvStatus !== 'Pending') {
+      logs.push({
+        nama: `${spvName} (SPV)`,
+        tanggal: durasi.split('(')[0].trim(),
+        aksi: spvStatus.toUpperCase(),
+        catatan: detailData.spv?.catatan || (spvStatus.toLowerCase() === 'approved' ? 'Meneruskan ke Manager' : 'Mengembalikan berkas')
+      });
+    }
+
+    const managerStatus = detailData.manager?.status || (detailData.managerApproval ? 'Approved' : null);
+    if (managerName && managerName !== '-' && managerStatus && managerStatus !== 'Pending') {
+      logs.push({
+        nama: `${managerName} (Manager)`,
+        tanggal: durasi.split('(')[0].trim(),
+        aksi: managerStatus.toUpperCase(),
+        catatan: managerStatus.toLowerCase() === 'approved' ? 'Menyetujui cuti (ACC)' : 'Menolak berkas'
+      });
+    }
+
+    return logs;
   };
 
-  const formattedDurasiKerja = getFormattedDuration();
+  const finalLogs = detailData.riwayatLog && detailData.riwayatLog.length > 0
+    ? detailData.riwayatLog.map(log => ({
+        nama: log.nama,
+        tanggal: log.waktu,
+        aksi: log.statusBadge,
+        catatan: log.catatan
+      }))
+    : generateDynamicLogs();
 
   // =========================================================================
   // 2. KONEKSI API NYATA: AKSI PERSETUJUAN / APPROVAL 
@@ -94,7 +138,6 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
     if (catatanAtasan === null) return; // Batal jika menekan cancel pada prompt
 
     try {
-      // Mengubah statusAksi menjadi lowercase ('approve', 'reject', 'return') agar pas dengan endpoint Java
       const actionEndpoint = statusAksi.toLowerCase() === 'approved' ? 'approve' : 
                              statusAksi.toLowerCase() === 'returned' ? 'return' : 'reject';
 
@@ -129,16 +172,16 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
           <div className="form-cuti__grid">
             <div className="form-cuti__field">
               <span className="form-cuti__label">Pemohon</span>
-              <span className="form-cuti__value">{detailData.karyawan?.nama}</span>
+              <span className="form-cuti__value">{pemohon}</span>
             </div>
             <div className="form-cuti__field">
               <span className="form-cuti__label">Jenis Permohonan</span>
-              <span className="form-cuti__value">{detailData.jenisCuti}</span>
+              <span className="form-cuti__value">{jenisCuti}</span>
             </div>
             <div className="form-cuti__field">
               <span className="form-cuti__label">Durasi Kerja</span>
               <span className="form-cuti__value form-cuti__value--accent">
-                {formattedDurasiKerja} {/* PERBAIKAN: Menampilkan total lamanya cuti (misal: "3 Hari") */}
+                {durasi}
               </span>            
              </div>
             <div className="form-cuti__field">
@@ -153,45 +196,54 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
           <div className="form-cuti__grid form-cuti__grid--three">
             <div className="form-cuti__field">
               <span className="form-cuti__label">App. Leader</span>
-              <span className="form-cuti__value">
-                {detailData.approvalChain?.leader || detailData.leaderName || detailData.leader?.fullName || '-'}
-              </span>
+              <span className="form-cuti__value">{leaderName}</span>
             </div>
-
             <div className="form-cuti__field">
               <span className="form-cuti__label">App. SPV</span>
-              <span className="form-cuti__value">
-                {detailData.approvalChain?.spv || detailData.spvName || detailData.spv?.fullName || '-'}
-              </span>
+              <span className="form-cuti__value">{spvName}</span>
             </div>
-
             <div className="form-cuti__field">
               <span className="form-cuti__label">App. Manager</span>
-              <span className="form-cuti__value">
-                {detailData.approvalChain?.manager || detailData.managerName || detailData.manager?.fullName || '-'}
-              </span>
+              <span className="form-cuti__value">{managerName}</span>
             </div>
           </div>
 
           {/* Keterangan & Alasan */}
           <div className="form-cuti__section">
             <span className="form-cuti__label">Alasan Keterangan</span>
-            <div className="form-cuti__box">{detailData.keterangan || '-'}</div>
+            <div className="form-cuti__box">{alasan}</div>
           </div>
 
-          {/* Pekerjaan Tertunda */}
-          <div className="form-cuti__section">
-            <span className="form-cuti__label">Pekerjaan Tertunda</span>
-            <div className="form-cuti__box">
-              {detailData.pendingWork || '-'}
+          {/* Pekerjaan Tertunda & Backup PIC */}
+          {(pekerjaanTertunda || coverOleh) && (
+            <div className="form-cuti__section">
+              <span className="form-cuti__label">Pekerjaan Tertunda &amp; Dicover Oleh</span>
+              <div className="form-cuti__box form-cuti__box--warn">
+                {pekerjaanTertunda || '-'}
+                {pekerjaanTertunda && coverOleh ? ' - ' : ''}
+                {coverOleh ? `Dicover Oleh: ${coverOleh}` : ''}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Backup PIC / Dicover Oleh */}
+          {/* Riwayat Log Pemeriksaan Berjenjang */}
           <div className="form-cuti__section">
-            <span className="form-cuti__label">Dicover Oleh (Backup PIC)</span>
-            <div className="form-cuti__box form-cuti__box--warn">
-              <strong>{detailData.coveredBy || '-'}</strong>
+            <span className="form-cuti__label">Riwayat Log Pemeriksaan Berjenjang</span>
+            <div className="form-cuti__log-list">
+              {finalLogs.map((log, idx) => (
+                <div className="form-cuti__log-item" key={idx}>
+                  <div className="form-cuti__log-dot" />
+                  <div className="form-cuti__log-content">
+                    <div className="form-cuti__log-top">
+                      <span className="form-cuti__log-role">{log.nama}</span>
+                      <span className="form-cuti__log-time">{log.tanggal}</span>
+                    </div>
+                    <div className="form-cuti__log-bottom">
+                      Status &middot; {log.aksi} ({log.catatan})
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -220,7 +272,6 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
                     if (isDitolak) dotColor = '#ef4444';
                     if (isDikembalikan) dotColor = '#f97316';
 
-                    // Bersihkan teks stringTanggal dari teks di dalam kurung (X Hari) jika ada
                     const historyDateOnly = (item.stringTanggal || '').split('(')[0].trim();
 
                     return (
@@ -249,10 +300,10 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
           </div>
 
           {/* Catatan Feedback Tambahan Khusus Jika Dikembalikan */}
-          {detailData.globalStatus?.toLowerCase() === 'dikembalikan' && detailData.spv?.catatan && (
+          {statusKey === 'DIKEMBALIKAN' && detailData.reviewNote && (
             <div className="form-cuti__section" style={{ marginTop: '4px' }}>
               <div className="form-cuti__box form-cuti__box--warn" style={{ color: '#b91c1c', borderColor: '#fca5a5', background: '#fef2f2' }}>
-                <strong>Catatan Pengembalian (SPV):</strong> {detailData.spv.catatan}
+                <strong>Catatan Pengembalian:</strong> {detailData.reviewNote}
               </div>
             </div>
           )}
@@ -269,6 +320,19 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
+              {/* TOMBOL EDIT BARU: Mengirimkan ID berkas ke fungsi edit bawaan induk */}
+              {handleEditKembali && statusKey === 'DIKEMBALIKAN' && (
+                <button 
+                  type="button" 
+                  className="form-cuti__edit-btn" 
+                  onClick={() => {
+                    handleEditKembali(detailData.id || selectedDetail.id); // Mengisi form otomatis
+                    onClose(); // Menutup modal detail setelah mengisi form
+                  }}
+                >
+                  Edit Berkas
+                </button>
+              )}
               <button type="button" className="form-cuti__close-btn" onClick={onClose}>Tutup Detail</button>
             </div>
           )}

@@ -7,6 +7,7 @@ const mapNews = (news) => ({
   isi: news.content,
   author: news.createdBy || 'HRD',
   createdAt: news.createdAt,
+  updatedAt: news.updatedAt,
 });
 
 export function getLabelStyle(label) {
