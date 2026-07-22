@@ -70,6 +70,7 @@ public class EmployeeController {
     @GetMapping("/approvers")
     public ResponseEntity<List<Map<String, Object>>> getApproversByRole(
             @RequestParam String role,
+            @RequestParam(required = false) Long employeeId, // [BARU]
             Authentication authentication,
             HttpServletRequest httpRequest) {
 
@@ -77,7 +78,24 @@ public class EmployeeController {
         activityLogService.log(authentication.getName(), getCurrentUserId(authentication), "GET_APPROVERS", "employees", null, "Melihat daftar approver role: " + role, httpRequest);
 
         Employee requester = karyawanService.getKaryawanByUsername(authentication.getName());
-        Long divisiId = requester.getDivisi() == null ? null : requester.getDivisi().getId();
+
+        // [BARU] employeeId dipakai HR/Super Admin untuk mengambil approver
+        // ATAS NAMA karyawan lain (dipakai form Cuti Susulan di halaman
+        // Manajemen Karyawan) -- divisi acuan jadi divisi KARYAWAN TARGET,
+        // bukan divisi HR yang sedang login. Kalau tidak diisi, perilaku
+        // persis seperti sebelumnya (divisi dari user yang login sendiri).
+        Employee divisionSource = requester;
+        if (employeeId != null) {
+            String requesterRoleName = requester.getUser().getRoleId().getRoleName();
+            boolean isPrivileged = "HRD_ADMIN".equalsIgnoreCase(requesterRoleName)
+                    || "SUPER_ADMIN".equalsIgnoreCase(requesterRoleName);
+            if (!isPrivileged) {
+                throw new RuntimeException("Tidak memiliki akses untuk memilih approver atas nama karyawan lain");
+            }
+            divisionSource = karyawanService.getKaryawanById(employeeId);
+        }
+
+        Long divisiId = divisionSource.getDivisi() == null ? null : divisionSource.getDivisi().getId();
 
         List<Map<String, Object>> response = karyawanService.getApproversByRoleAndDivisi(role, divisiId).stream()
                 .map(employee -> Map.<String, Object>of(

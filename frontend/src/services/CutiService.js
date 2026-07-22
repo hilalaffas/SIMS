@@ -29,7 +29,13 @@ const logStatusLabel = (value) => ({
 }[String(value || '').toUpperCase()] || value || '-');
 
 export const getLeaveBalance = () => api.get('/api/cuti/balance/me');
-export const getApprovers = (role) => api.get(`/api/karyawan/approvers?role=${role}`);
+// [UBAH] Tambah employeeId opsional -- dipakai form Cuti Susulan (HR pilih
+// approver ATAS NAMA karyawan lain, bukan dirinya sendiri). Pemanggilan lama
+// tanpa employeeId (Ajukan Cuti normal) tetap jalan persis seperti sebelumnya.
+export const getApprovers = (role, employeeId) => {
+  const query = employeeId ? `role=${role}&employeeId=${employeeId}` : `role=${role}`;
+  return api.get(`/api/karyawan/approvers?${query}`);
+};
 export const getLeaveTypes = () => api.get('/api/jenis-cuti');
 
 export async function submitCuti(payload) {

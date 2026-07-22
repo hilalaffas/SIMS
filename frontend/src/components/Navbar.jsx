@@ -8,6 +8,41 @@ import NotifPasswordResetModal from './NotifPasswordResetModal';
 import NotifLeaveApprovalModal from './NotifLeaveApprovalModal'; // [BARU]
 import './Navbar.css'; 
 
+// [BARU] Backend belum punya tabel Notification (status read/unread persisten),
+// jadi untuk notifikasi status cuti milik pengaju sendiri, "sudah dibaca"
+// disimpan sementara di localStorage per user (key = username, satu-satunya
+// identifier stabil yang ada di object user saat ini -- lihat authService.js).
+// Supaya begitu ditandai dibaca, notif yang sama tidak muncul lagi terus.
+const SEEN_NOTIF_PREFIX = 'sims_seen_leave_notif_';
+
+function getSeenLeaveNotifIds(userKey) {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(`${SEEN_NOTIF_PREFIX}${userKey}`) || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function markLeaveNotifSeen(userKey, seenKeys) {
+  if (!seenKeys || seenKeys.length === 0) return;
+  const current = getSeenLeaveNotifIds(userKey);
+  seenKeys.forEach((key) => current.add(key));
+  try {
+    localStorage.setItem(`${SEEN_NOTIF_PREFIX}${userKey}`, JSON.stringify([...current]));
+  } catch {
+    // localStorage penuh/diblokir browser -- notifikasi tetap tampil normal, cuma tidak persist
+  }
+}
+
+// [BARU] Teks notifikasi status cuti untuk pengaju sendiri, per jenis aksi.
+// Sebelumnya hanya "approved" & "returned" yang ditangani -- "rejected" (Ditolak)
+// belum pernah punya notifikasi sama sekali.
+const LEAVE_STATUS_NOTIF_TEXT = {
+  approved: (jenis) => <>Pengajuan <strong>{jenis}</strong> Anda telah <strong>disetujui.</strong></>,
+  rejected: (jenis) => <>Pengajuan <strong>{jenis}</strong> Anda telah <strong>ditolak.</strong></>,
+  returned: (jenis) => <>Pengajuan <strong>{jenis}</strong> Anda telah <strong>dikembalikan.</strong></>,
+};
+
 // Tambahkan parameter object user untuk mengambil id data dari database/API
 export default function Navbar({ toggleSidebar, user }) {
   const location = useLocation();
@@ -40,58 +75,71 @@ export default function Navbar({ toggleSidebar, user }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // Normalisasi data user role
-  const userRole = (user?.jabatan || user?.role || 'Karyawan').toLowerCase();
-  const userId = user?.id ?? 'guest';
+  // [UBAH] user.id TIDAK PERNAH ada di object user hasil login (lihat
+  // authService.js -- cuma { username, role, name }), jadi userId di sini
+  // selalu 'guest' dan bikin notifikasi status cuti pengaju tidak pernah
+  // muncul. Diganti ke username, satu-satunya identifier stabil yang ada.
+  const userKey = user?.username ?? 'guest';
   const userName = user?.nama || user?.name || 'Karyawan';
 
   useEffect(() => {
     const fetchNotificationFromDB = async () => {
       try {
-        // Ambil data riwayat cuti dari API/Database
-        const rawData = await getRiwayatByUser(userId);
-        
-        if (!rawData || rawData.length === 0) return;
+        // Ambil riwayat cuti milik user yang login -- /api/cuti/me sudah
+        // otomatis di-scope ke user tersebut oleh backend lewat token JWT,
+        // jadi tidak perlu (dan tidak bisa) difilter ulang pakai userId di sini.
+        const rawData = await getRiwayatByUser();
 
+        if (!rawData || rawData.length === 0) {
+          setNotifications([]);
+          return;
+        }
+
+        const seenIds = getSeenLeaveNotifIds(userKey);
         const mappedNotifications = [];
 
         rawData.forEach((item) => {
           const statusBerkas = item.status ? item.status.toLowerCase() : 'proses';
           const jenisCutiNama = item.rawDetail?.jenisCuti || item.jenisCuti || 'Cuti tahunan';
           const stringTanggal = item.stringTanggal || 'Tanggal tidak tersedia';
-          const pemohon = item.userName || 'Karyawan';
 
-          // 1. Logika untuk Role Pemohon (Karyawan, Leader, SPV melihat status cuti milik sendiri)
-          if (item.userId === userId) {
-            if (statusBerkas.includes('kembali') || statusBerkas.includes('return')) {
-              mappedNotifications.push({
-                id: `ret-${item.id}`,
-                text: <>Pengajuan <strong>{jenisCutiNama}</strong> Anda telah <strong>dikembalikan.</strong></>,
-                date: stringTanggal,
-                type: "returned"
-              });
-            } else if (statusBerkas.includes('setuju') || statusBerkas.includes('acc')) {
-              mappedNotifications.push({
-                id: `app-${item.id}`,
-                text: <>Pengajuan <strong>{jenisCutiNama}</strong> Anda telah <strong>disetujui.</strong></>,
-                date: stringTanggal,
-                type: "approved"
-              });
-            }
+          // [UBAH] Sebelumnya ada gate `item.userId === userId` yang SELALU
+          // false (mapMyLeave() tidak pernah set field userId, dan userId di
+          // sini pun selalu 'guest') -- jadi notifikasi status cuti untuk
+          // pengaju sendiri TIDAK PERNAH muncul. Gate itu juga sebenarnya
+          // tidak diperlukan lagi karena rawData di atas sudah pasti cuma
+          // berisi cuti milik user yang login (lihat catatan getRiwayatByUser).
+          let notifKind = null;
+          if (statusBerkas.includes('kembali')) {
+            notifKind = 'returned';
+          } else if (statusBerkas.includes('setuju') || statusBerkas.includes('acc')) {
+            notifKind = 'approved';
+          } else if (statusBerkas.includes('tolak')) {
+            // [BARU] Status "Ditolak" sebelumnya tidak pernah menghasilkan notifikasi sama sekali.
+            notifKind = 'rejected';
           }
 
-          // 2. Logika untuk Atasan (Leader, SPV, Manager menerima notifikasi adanya pengajuan baru masuk)
-          const isAtasanLeader = userRole.includes('leader') && item.rawDetail?.leader?.status?.toLowerCase() === 'pending';
-          const isAtasanSPV = userRole.includes('spv') && item.rawDetail?.spv?.status?.toLowerCase() === 'pending';
-          const isAtasanManager = userRole.includes('manager') && item.rawDetail?.manager?.status?.toLowerCase() === 'pending';
+          if (!notifKind) return;
 
-          if ((isAtasanLeader || isAtasanSPV || isAtasanManager) && item.userId !== userId) {
-            mappedNotifications.push({
-              id: `new-${item.id}`,
-              text: <>Ada pengajuan <strong>{jenisCutiNama}</strong> baru dari Karyawan ({pemohon}) menunggu persetujuan Anda.</>,
-              date: stringTanggal,
-              type: "new"
-            });
-          }
+          // [BARU] Lewati notifikasi yang sudah pernah ditandai dibaca supaya
+          // tidak muncul berulang tiap kali dropdown notifikasi dibuka.
+          const seenKey = `${item.id}-${notifKind}`;
+          if (seenIds.has(seenKey)) return;
+
+          mappedNotifications.push({
+            id: `${notifKind}-${item.id}`,
+            seenKey,
+            text: LEAVE_STATUS_NOTIF_TEXT[notifKind](jenisCutiNama),
+            date: stringTanggal,
+            type: notifKind,
+          });
+
+          // Catatan: notifikasi "ada pengajuan baru masuk" untuk atasan
+          // (Leader/SPV/Manager) TIDAK ditangani di loop ini lagi -- versi
+          // lamanya juga tidak pernah benar-benar jalan (rawDetail tidak
+          // pernah punya field leader/spv/manager). Notifikasi itu sekarang
+          // sepenuhnya ditangani oleh mekanisme leaveApprovalTasks di bawah
+          // (sumbernya /api/cuti/approvals/my-task, sudah scoped per approver).
         });
 
         setNotifications(mappedNotifications);
@@ -100,10 +148,10 @@ export default function Navbar({ toggleSidebar, user }) {
       }
     };
 
-    if (userId !== 'guest') {
+    if (userKey !== 'guest') {
       fetchNotificationFromDB();
     }
-  }, [userId, userRole, showDropdown]); // Berjalan otomatis setiap kali id user berubah atau dropdown dibuka
+  }, [userKey, showDropdown]); // Berjalan otomatis setiap kali identitas user berubah atau dropdown dibuka
   // === BAGIAN TAMBAHAN NOTIFIKASI REAL-TIME DARI DATABASE (END) ===
 
   // === [BARU] NOTIFIKASI PERMINTAAN RESET SANDI (HR ADMIN / SUPER ADMIN) ===
@@ -221,6 +269,13 @@ export default function Navbar({ toggleSidebar, user }) {
       setSelectedResetNotif(notif.raw);
     } else if (notif.type === 'leave-approval') {
       setSelectedLeaveNotif(notif.raw);
+    } else if (['approved', 'rejected', 'returned'].includes(notif.type)) {
+      // [BARU] Klik notifikasi status cuti sendiri -> tandai sudah dibaca
+      // (tidak muncul lagi) & langsung ke halaman Cuti Saya.
+      markLeaveNotifSeen(userKey, [notif.seenKey]);
+      setNotifications((prev) => prev.filter((n) => n.seenKey !== notif.seenKey));
+      setShowDropdown(false);
+      navigate('/ApplyCuti');
     }
   };
 
@@ -300,7 +355,18 @@ export default function Navbar({ toggleSidebar, user }) {
             <div className="notification-dropdown">
               <div className="notification-header">
                 <span className="notification-header-title">Notifikasi Terbaru</span>
-                <button className="btn-mark-read" onClick={() => setNotifications([])}>Tandai dibaca</button>
+                <button
+                  className="btn-mark-read"
+                  onClick={() => {
+                    // [UBAH] Sebelumnya cuma setNotifications([]) -- hilang lagi
+                    // begitu dropdown dibuka ulang (langsung fetch ulang & muncul
+                    // lagi). Sekarang benar-benar dipersist ke localStorage.
+                    markLeaveNotifSeen(userKey, notifications.map((n) => n.seenKey));
+                    setNotifications([]);
+                  }}
+                >
+                  Tandai dibaca
+                </button>
               </div>
               <ul className="notification-list">
                 {allNotifications.length === 0 ? (
@@ -311,7 +377,7 @@ export default function Navbar({ toggleSidebar, user }) {
                       key={notif.id}
                       className="notification-item"
                       onClick={() => handleNotifClick(notif)}
-                      style={['password-reset', 'leave-approval'].includes(notif.type) ? { cursor: 'pointer' } : undefined}
+                      style={['password-reset', 'leave-approval', 'approved', 'rejected', 'returned'].includes(notif.type) ? { cursor: 'pointer' } : undefined}
                     >
                       <div className="notification-icon-wrapper">
                         {notif.type === 'returned' && (
@@ -324,6 +390,13 @@ export default function Navbar({ toggleSidebar, user }) {
                           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-approved">
                             <circle cx="12" cy="12" r="10" stroke="#10b981" strokeWidth="2" fill="none"/>
                             <path d="M8 12l3 3 5-5" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                        {/* [BARU] Ikon khusus notifikasi cuti ditolak, sebelumnya tidak pernah ada */}
+                        {notif.type === 'rejected' && (
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="icon-svg-rejected">
+                            <circle cx="12" cy="12" r="10" stroke="#ef4444" strokeWidth="2" fill="none"/>
+                            <path d="M9 9l6 6m0-6l-6 6" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/>
                           </svg>
                         )}
                         {notif.type === 'new' && (
@@ -358,6 +431,10 @@ export default function Navbar({ toggleSidebar, user }) {
                         )}
                         {notif.type === 'leave-approval' && (
                           <span className="notification-action-hint notification-action-hint_leave">Klik untuk memproses →</span>
+                        )}
+                        {/* [BARU] Hint klik untuk notif status cuti sendiri (approved/rejected/returned) */}
+                        {['approved', 'rejected', 'returned'].includes(notif.type) && (
+                          <span className="notification-action-hint">Klik untuk lihat →</span>
                         )}
                       </div>
                     </li>
