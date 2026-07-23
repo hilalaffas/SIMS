@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { getApprovers, getLeaveBalance, getLeaveTypes, getMyLeaveDetail, getRiwayatByUser, mapApproval, resubmitCuti, submitCuti } from '../../../services/CutiService';
-import LeaveSummaryCard from './components/LeaveSummaryCard';
+import CutiSummaryCards from '../../Dashboard/components/CutiSummaryCards';
 import LeaveForm from './components/LeaveForm';
 import { hariLiburNasional, hitungBatasMinTanggal } from '../../../utils/dateUtils'; // sesuaikan path file Anda
 import LeaveHistory from './components/LeaveHistory';
@@ -62,9 +62,9 @@ const ApplyCuti = ({ user }) => {
   const [reason, setReason] = useState('');
   const [pendingWork, setPendingWork] = useState('');
   const [coveredBy, setCoveredBy] = useState('');
-  const [leaderApproval, setLeaderApproval] = useState('');
-  const [spvApproval, setSpvApproval] = useState('');
-  const [managerApproval, setManagerApproval] = useState('');
+  const [leaderEmployeeId, setLeaderEmployeeId] = useState('');
+  const [spvEmployeeId, setSpvEmployeeId] = useState('');
+  const [managerEmployeeId, setManagerEmployeeId] = useState('');
   const [filterStatus, setFilterStatus] = useState('Semua Berkas');
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,7 +108,7 @@ const ApplyCuti = ({ user }) => {
     initData();
   }, [load]);  
   
-  //useEffect(() => { if (atasan) { setLeaderApproval(''); setSpvApproval(''); } }, [atasan]);
+  //useEffect(() => { if (atasan) { setLeaderEmployeeId(''); setSpvEmployeeId(''); } }, [atasan]);
 
   // Di dalam handleSubmit di ApplyCuti.js
   const handleSubmit = async (event) => {
@@ -118,7 +118,7 @@ const ApplyCuti = ({ user }) => {
       return;
     }
     const type = types.find(item => item.name === jenisCuti);
-    if (!type || !managerApproval || (!atasan && (!leaderApproval || !spvApproval))) {
+    if (!type || !managerEmployeeId || (!atasan && (!leaderEmployeeId || !spvEmployeeId))) {
       setError('Pilih seluruh approver yang wajib sebelum mengirim pengajuan.'); 
       return;
     }
@@ -131,9 +131,9 @@ const ApplyCuti = ({ user }) => {
         reason, 
         pendingWork, 
         coveredBy,
-        leaderEmployeeId: atasan || !leaderApproval ? null : Number(leaderApproval), 
-        spvEmployeeId: atasan || !spvApproval ? null : Number(spvApproval), 
-        managerEmployeeId: Number(managerApproval) 
+        leaderEmployeeId: atasan || !leaderEmployeeId ? null : Number(leaderEmployeeId), 
+        spvEmployeeId: atasan || !spvEmployeeId ? null : Number(spvEmployeeId), 
+        managerEmployeeId: Number(managerEmployeeId) 
       };
       
       if (editingId) {
@@ -141,7 +141,7 @@ const ApplyCuti = ({ user }) => {
       } else {
         await submitCuti(payload);
       }
-      setReason(''); setPendingWork(''); setCoveredBy(''); setLeaderApproval(''); setSpvApproval(''); setManagerApproval(''); setEditingId(null);
+      setReason(''); setPendingWork(''); setCoveredBy(''); setLeaderEmployeeId(''); setSpvEmployeeId(''); setManagerEmployeeId(''); setEditingId(null);
       await load(); 
       alert(editingId ? 'Perbaikan cuti berhasil diajukan kembali.' : 'Pengajuan cuti berhasil dikirim.');
     } catch (err) {
@@ -174,9 +174,9 @@ const ApplyCuti = ({ user }) => {
     setReason(detail.reason || '');
     setPendingWork(detail.pendingWork || '');
     setCoveredBy(detail.coveredBy || '');
-    setLeaderApproval('');
-    setSpvApproval('');
-    setManagerApproval('');
+    setLeaderEmployeeId('');
+    setSpvEmployeeId('');
+    setManagerEmployeeId('');
     setEditingId(id);
     setError('Lengkapi kembali approver, lalu simpan perbaikan cuti Anda.');
     formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -188,12 +188,14 @@ const ApplyCuti = ({ user }) => {
   };
 
   return <div className="form-wrapper" ref={formTopRef}>
-    <LeaveSummaryCard sisaCutiTahunan={balance} />
+    <div className="applycuti-summary-wrapper">
+      <CutiSummaryCards sisaCutiTahunan={balance} berlakuHingga={`31 Des ${new Date().getFullYear()}`} />
+    </div>
     {error && <div className="empty-history-box">{error}</div>}
     <LeaveForm {...{ jenisCuti, setJenisCuti, durasiSesi, setDurasiSesi, startDate, setStartDate, endDate, setEndDate,
-      reason, setReason, leaderApproval, setLeaderApproval, spvApproval, setSpvApproval, managerApproval, setManagerApproval, jedaHariKerja, dinamisBatasMinStr,
+      reason, setReason, leaderEmployeeId, setLeaderEmployeeId, spvEmployeeId, setSpvEmployeeId, managerEmployeeId, setManagerEmployeeId, dinamisBatasMinStr,
       pendingWork, setPendingWork, coveredBy, setCoveredBy, handleSubmit, isSubmitting, todayStr, jumlahHariCuti, isEditing: Boolean(editingId), onCancelEdit: cancelEdit }}
-      leaveTypes={types} approvers={approvers} isSupervisor={atasan} currentUserRole={userRole} canApplyCuti />
+      leaveTypes={types} approvers={approvers} isSupervisor={atasan} canApplyCuti />
     <LeaveHistory riwayatCuti={history} filterStatus={filterStatus} setFilterStatus={setFilterStatus} handleOpenDetail={handleOpenDetail} handleEditKembali={handleEditKembali} />
     {selectedDetail && (
   <FormCuti

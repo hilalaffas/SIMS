@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getApprovalDetail, getMyLeaveDetail, takeApprovalAction, mapApproval } from '../../../../services/CutiService'; // PERBAIKAN: Import Service API Nyata
+import LeaveDetailLogHistory from './LeaveDetailLogHistory';
 import './LeaveDetailModal.css'; 
 
 const STATUS_LABEL = {
@@ -14,9 +15,43 @@ const STATUS_LABEL = {
   'REJECTED': "Ditolak",
 };
 
+// Ubah "3 Agu 2026 - 3 Agu 2026 (1 Hari)" menjadi "3 Agu - 3 Agu 2026 (1 Hari)"
+// (tahun pada tanggal awal disembunyikan jika sama dengan tahun tanggal akhir)
+const formatShortDateRange = (fullStr) => {
+  if (!fullStr) return fullStr;
+  const suffixMatch = fullStr.match(/\s*(\(.*\))\s*$/);
+  const suffix = suffixMatch ? ` ${suffixMatch[1]}` : '';
+  const rangePart = suffixMatch ? fullStr.slice(0, suffixMatch.index).trim() : fullStr.trim();
+
+  const match = rangePart.match(/^(\d{1,2}\s+\S+)\s+(\d{4})\s*-\s*(\d{1,2}\s+\S+)\s+(\d{4})$/);
+  if (!match) return fullStr;
+
+  const [, startPart, startYear, endPart, endYear] = match;
+  const shortRange = startYear === endYear
+    ? `${startPart} - ${endPart} ${endYear}`
+    : `${startPart} ${startYear} - ${endPart} ${endYear}`;
+
+  return `${shortRange}${suffix}`;
+};
+
 const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshData, allHistory = [], employeeLookup = {}, handleEditKembali }) => {
   const [detailData, setDetailData] = useState(selectedDetail);
   const [isLoading, setIsLoading] = useState(false);
+
+  const pemohon = detailData.karyawan?.nama || detailData.pemohon || 'Karyawan';
+  const jenisCuti = detailData.jenisCuti;
+  const durasi = detailData.durasi || detailData.stringTanggal;
+  const statusKey = (detailData.statusBerkas || detailData.globalStatus || 'PROSES').toUpperCase();
+  const statusTercetak = STATUS_LABEL[statusKey] || detailData.statusBerkas || detailData.globalStatus || "Proses";
+
+  const leaderName = detailData.approvalChain?.leader || detailData.leader?.nama || detailData.leaderEmployeeId || '-';
+  const spvName = detailData.approvalChain?.spv || detailData.spv?.nama || detailData.spvEmployeeId || '-';
+  const managerName = detailData.approvalChain?.manager || detailData.manager?.nama || detailData.managerEmployeeId || '-';
+
+  const alasan = detailData.keterangan || detailData.alasan || '-';
+  const pekerjaanTertunda = detailData.pendingWork || detailData.pekerjaanTertunda || '';
+  const coverOleh = detailData.coveredBy || detailData.coverOleh || '';
+
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -61,20 +96,6 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
   if (!detailData) return null;
 
   // Normalisasi data kompatibilitas
-  const pemohon = detailData.karyawan?.nama || detailData.pemohon || 'Karyawan';
-  const jenisCuti = detailData.jenisCuti;
-  const durasi = detailData.durasi || detailData.stringTanggal;
-  const statusKey = (detailData.statusBerkas || detailData.globalStatus || 'PROSES').toUpperCase();
-  const statusTercetak = STATUS_LABEL[statusKey] || detailData.statusBerkas || detailData.globalStatus || "Proses";
-
-  const leaderName = detailData.approvalChain?.leader || detailData.leader?.nama || detailData.leaderApproval || '-';
-  const spvName = detailData.approvalChain?.spv || detailData.spv?.nama || detailData.spvApproval || '-';
-  const managerName = detailData.approvalChain?.manager || detailData.manager?.nama || detailData.managerApproval || '-';
-
-  const alasan = detailData.keterangan || detailData.alasan || '-';
-  const pekerjaanTertunda = detailData.pendingWork || detailData.pekerjaanTertunda || '';
-  const coverOleh = detailData.coveredBy || detailData.coverOleh || '';
-
   // =========================================================================
   // LOGIKA TAMBAHAN: GENERATE LOG DINAMIS SEBAGAI FALLBACK
   // =========================================================================
@@ -88,7 +109,7 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
       }
     ];
 
-    const leaderStatus = detailData.leader?.status || (detailData.leaderApproval ? 'Approved' : null);
+    const leaderStatus = detailData.leader?.status || (detailData.leaderEmployeeId ? 'Approved' : null);
     if (leaderName && leaderName !== '-' && leaderStatus && leaderStatus !== 'Pending') {
       logs.push({
         nama: `${leaderName} (Leader)`,
@@ -98,7 +119,7 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
       });
     }
 
-    const spvStatus = detailData.spv?.status || (detailData.spvApproval ? 'Approved' : null);
+    const spvStatus = detailData.spv?.status || (detailData.spvEmployeeId ? 'Approved' : null);
     if (spvName && spvName !== '-' && spvStatus && spvStatus !== 'Pending') {
       logs.push({
         nama: `${spvName} (SPV)`,
@@ -108,7 +129,7 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
       });
     }
 
-    const managerStatus = detailData.manager?.status || (detailData.managerApproval ? 'Approved' : null);
+    const managerStatus = detailData.manager?.status || (detailData.managerEmployeeId ? 'Approved' : null);
     if (managerName && managerName !== '-' && managerStatus && managerStatus !== 'Pending') {
       logs.push({
         nama: `${managerName} (Manager)`,
@@ -181,7 +202,7 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
             <div className="form-cuti__field">
               <span className="form-cuti__label">Durasi Kerja</span>
               <span className="form-cuti__value form-cuti__value--accent">
-                {durasi}
+                {formatShortDateRange(durasi)}
               </span>            
              </div>
             <div className="form-cuti__field">
@@ -226,83 +247,17 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
             </div>
           )}
 
-          {/* Riwayat Log Pemeriksaan Berjenjang */}
-          <div className="form-cuti__section">
-            <span className="form-cuti__label">Riwayat Log Pemeriksaan Berjenjang</span>
-            <div className="form-cuti__log-list">
-              {finalLogs.map((log, idx) => (
-                <div className="form-cuti__log-item" key={idx}>
-                  <div className="form-cuti__log-dot" />
-                  <div className="form-cuti__log-content">
-                    <div className="form-cuti__log-top">
-                      <span className="form-cuti__log-role">{log.nama}</span>
-                      <span className="form-cuti__log-time">{log.tanggal}</span>
-                    </div>
-                    <div className="form-cuti__log-bottom">
-                      Status &middot; {log.aksi} ({log.catatan})
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Riwayat Pengajuan Cuti Sebelumnya */}
-          <div className="form-cuti__section">
-            <span className="form-cuti__label">Semua Riwayat Pengajuan Cuti Anda</span>
-            <div className="form-cuti__log-list" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-              {allHistory.length > 0 ? (
-                [...allHistory]
-                  .sort((a, b) => {
-                    const aIsPending = !a.status?.toLowerCase().includes('setujui') && !a.status?.toLowerCase().includes('tolak') && a.status !== 'APPROVED' && a.status !== 'REJECTED';
-                    const bIsPending = !b.status?.toLowerCase().includes('setujui') && !b.status?.toLowerCase().includes('tolak') && b.status !== 'APPROVED' && b.status !== 'REJECTED';
-
-                    if (aIsPending && !bIsPending) return -1;
-                    if (!aIsPending && bIsPending) return 1;
-
-                    return (b.id || 0) - (a.id || 0);
-                  })
-                  .map((item, idx) => {
-                    const isAcc = item.status?.toLowerCase().includes('setujui') || item.status === 'APPROVED';
-                    const isDitolak = item.status?.toLowerCase().includes('tolak') || item.status === 'REJECTED';
-                    const isDikembalikan = item.status?.toLowerCase().includes('kembali') || item.status === 'RETURNED';
-                    
-                    let dotColor = '#eab308';
-                    if (isAcc) dotColor = '#22c55e';
-                    if (isDitolak) dotColor = '#ef4444';
-                    if (isDikembalikan) dotColor = '#f97316';
-
-                    const historyDateOnly = (item.stringTanggal || '').split('(')[0].trim();
-
-                    return (
-                      <div className="form-cuti__log-item" key={idx} style={{ opacity: item.id === detailData.id ? 1 : 0.75 }}>
-                        <div className="form-cuti__log-dot" style={{ backgroundColor: dotColor }} />
-                        <div className="form-cuti__log-content">
-                          <div className="form-cuti__log-top">
-                            <span className="form-cuti__log-role" style={{ fontWeight: item.id === detailData.id ? '700' : '600' }}>
-                              {item.jenisCuti} {item.id === detailData.id && <span style={{ fontSize: '11px', color: '#0284c7' }}>(Berkas Ini)</span>}
-                            </span>
-                            <span className="form-cuti__log-time">{historyDateOnly}</span>
-                          </div>
-                          <div className="form-cuti__log-bottom" style={{ marginTop: '2px' }}>
-                            Durasi: {item.totalHari} &middot; Status: <strong style={{ color: dotColor }}>{item.status}</strong>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-              ) : (
-                <div className="form-cuti__box" style={{ color: '#6b7280', textAlign: 'center', fontSize: '14px' }}>
-                  Belum ada riwayat pengajuan cuti sebelumnya.
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Riwayat Log Pemeriksaan Berjenjang + Semua Riwayat Pengajuan Cuti Anda */}
+          <LeaveDetailLogHistory
+            finalLogs={finalLogs}
+            allHistory={allHistory}
+            currentId={detailData.id}
+          />
 
           {/* Catatan Feedback Tambahan Khusus Jika Dikembalikan */}
           {statusKey === 'DIKEMBALIKAN' && detailData.reviewNote && (
-            <div className="form-cuti__section" style={{ marginTop: '4px' }}>
-              <div className="form-cuti__box form-cuti__box--warn" style={{ color: '#b91c1c', borderColor: '#fca5a5', background: '#fef2f2' }}>
+            <div className="form-cuti__section form-cuti__section--feedback">
+              <div className="form-cuti__box form-cuti__box--warn form-cuti__box--feedback">
                 <strong>Catatan Pengembalian:</strong> {detailData.reviewNote}
               </div>
             </div>
@@ -312,15 +267,14 @@ const LeaveDetailModal = ({ selectedDetail, onClose, currentUserRole, onRefreshD
         {/* FOOTER MODAL */}
         <div className="form-cuti__footer">
           {isAtasan && statusKey === 'PROSES' ? (
-            <div className="action-approval-buttons" style={{ display: 'flex', gap: '8px', width: '100%' }}>
-              <button type="button" className="btn-approve" style={{ background: '#16a34a', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }} onClick={() => handleActionApproval('Approved')}>Setujui (ACC)</button>
-              <button type="button" className="btn-return" style={{ background: '#ea580c', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }} onClick={() => handleActionApproval('Returned')}>Kembalikan</button>
-              <button type="button" className="btn-reject" style={{ background: '#dc2626', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }} onClick={() => handleActionApproval('Rejected')}>Tolak</button>
-              <button type="button" style={{ marginLeft: 'auto', background: '#ccc', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }} onClick={onClose}>Batal</button>
+            <div className="action-approval-buttons">
+              <button type="button" className="btn-approve" onClick={() => handleActionApproval('Approved')}>Setujui (ACC)</button>
+              <button type="button" className="btn-return" onClick={() => handleActionApproval('Returned')}>Kembalikan</button>
+              <button type="button" className="btn-reject" onClick={() => handleActionApproval('Rejected')}>Tolak</button>
+              <button type="button" className="btn-cancel-detail" onClick={onClose}>Batal</button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
-              {/* TOMBOL EDIT BARU: Mengirimkan ID berkas ke fungsi edit bawaan induk */}
+            <div className="form-cuti__footer-actions">
               {handleEditKembali && statusKey === 'DIKEMBALIKAN' && (
                 <button 
                   type="button" 

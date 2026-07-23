@@ -306,10 +306,12 @@
 }
 
 .form-cuti__title {
-  margin: 0;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin: 0 0 4px 0;
+  letter-spacing: 0.5px;
 }
 
 .form-cuti__subtitle {
@@ -412,58 +414,14 @@
   font-style: italic;
 }
 
-/* AREA RIWAYAT LOG PEMERIKSAAN BERJENJANG */
+/* AREA RIWAYAT LOG PEMERIKSAAN BERJENJANG (kontainer umum tetap di sini,
+   style detail kartu log dipindah ke LeaveDetailLogHistory.css) */
 .form-cuti__section {
   display: flex;
   flex-direction: column;
-}
-
-.form-cuti__log-list {
-  display: flex;
-  flex-direction: column;
   gap: 12px;
-  margin-top: 8px;
 }
 
-/* Kartu Riwayat Tipis di Dalam Log */
-.form-cuti__log-item {
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.form-cuti__log-content {
-  flex-grow: 1;          /* Memaksa kontainer ini menghabiskan seluruh sisa ruang kanan */
-  display: flex;
-  flex-direction: column;
-}
-
-.form-cuti__log-top {
-  display: flex;
-  justify-content: space-between; /* <-- Ini yang membuat nama di kiri dan tanggal di paling kanan */
-  align-items: center;
-  width: 100%;                   /* <-- Memastikan kontainer memakai lebar penuh kotak */
-}
-
-.form-cuti__log-role {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.form-cuti__log-time {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.form-cuti__log-bottom {
-  font-size: 12.5px;
-  color: #64748b;
-}
 
 /* Alert Box Merah Tambahan (Jika Data Dikembalikan) */
 .modal-feedback-alert {
@@ -473,6 +431,17 @@
   padding: 12px 14px;
   color: #991b1b;
   font-size: 13px;
+}
+
+/* Catatan Feedback Pengembalian (dipakai di form-cuti__section + form-cuti__box) */
+.form-cuti__section--feedback {
+  margin-top: 4px;
+}
+
+.form-cuti__box--feedback {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: #fef2f2;
 }
 
 /* FOOTER MODAL */
@@ -501,20 +470,55 @@
   background-color: #0b3a2c;
 }
 
-/* Mengatur baris nama dan tanggal agar melebar penuh */
-.form-cuti__log-row-wrapper {
+/* Baris tombol approval Leader/SPV/Manager (Setujui/Kembalikan/Tolak/Batal) */
+.action-approval-buttons {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 8px;
   width: 100%;
-  margin-bottom: 4px; /* Memberi jarak sedikit dengan teks status di bawahnya */
 }
 
-/* Memastikan teks tanggal tidak turun ke bawah */
-.form-cuti__log-time {
-  font-size: 12px;
-  color: #94a3b8;
-  white-space: nowrap; /* Mencegah tanggal terpotong menjadi 2 baris */
+.btn-approve {
+  background: #16a34a;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-return {
+  background: #ea580c;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-reject {
+  background: #dc2626;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-cancel-detail {
+  margin-left: auto;
+  background: #ccc;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Baris tombol non-approval (Edit Berkas / Tutup Detail) */
+.form-cuti__footer-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: flex-end;
 }
 
 /* ==========================================

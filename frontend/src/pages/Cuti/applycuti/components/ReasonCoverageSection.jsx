@@ -3,12 +3,11 @@ import './LeaveForm.css';
 
 /**
  * Bagian: ALASAN/KETERANGAN, PEKERJAAN TERTUNDA, DICOVER OLEH (BACKUP PIC)
- * (dipecah dari LeaveForm.jsx supaya jadi file tersendiri)
  */
 const ReasonCoverageSection = ({
   reason, setReason,
-  pendingWork, setpendingWork,
-  coveredBy, setcoveredBy,
+  pendingWork, setPendingWork,
+  coveredBy, setCoveredBy,
 }) => {
   return (
     <>
@@ -19,12 +18,12 @@ const ReasonCoverageSection = ({
 
       <div className="form-group">
         <label className="form-label">PEKERJAAN TERTUNDA *</label>
-        <textarea rows="2" value={pendingWork} onChange={(e) => setpendingWork(e.target.value)} placeholder="Sebutkan pekerjaan apa saja yang tertunda..." className="form-control textarea-control" required />
+        <textarea rows="2" value={pendingWork} onChange={(e) => setPendingWork(e.target.value)} placeholder="Sebutkan pekerjaan apa saja yang tertunda..." className="form-control textarea-control" required />
       </div>
 
       <div className="form-group">
-        <label className="form-label">DICOVER OLEH (BACKUP PIC) *</label>
-        <input type="text" value={coveredBy} onChange={(e) => setcoveredBy(e.target.value)} placeholder="Nama rekan kerja yang mem-backup pekerjaan Anda..." className="form-control" required />
+        <label className="form-label">DICOVER OLEH*</label>
+        <input type="text" value={coveredBy} onChange={(e) => setCoveredBy(e.target.value)} placeholder="Nama rekan kerja yang mem-backup pekerjaan Anda..." className="form-control" required />
       </div>
     </>
   );

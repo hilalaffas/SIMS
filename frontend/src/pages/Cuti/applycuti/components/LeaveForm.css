@@ -11,7 +11,7 @@
 }
 
 .form-header {
-  background-color: #2d6a4f;
+  background-color: #0f4c3a;
   color: #ffffff;
   padding: 24px;
 }
@@ -306,7 +306,10 @@ input[type="date"]::-webkit-calendar-picker-table td:nth-child(7) {
   background: #f1f5f9;
 }
 
-.mini-day-cell.weekend {
+/* Tanggal weekend (Sabtu/Minggu) berwarna merah.
+   Selector diperkuat (button + 2 class) agar tidak kalah spesifisitas
+   dengan style global lain, dan tidak lagi bergantung urutan deklarasi. */
+button.mini-day-cell.weekend {
   color: #ef4444 !important;
 }
 
@@ -331,4 +334,18 @@ input[type="date"]::-webkit-calendar-picker-table td:nth-child(7) {
   color: #cbd5e1 !important;
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Status berikut lebih diprioritaskan daripada warna merah weekend,
+   spesifisitas dinaikkan (button + 3 class/pseudo) supaya urutan CSS tidak berpengaruh */
+button.mini-day-cell.weekend.selected {
+  color: #ffffff !important;
+}
+
+button.mini-day-cell.weekend.outside-month {
+  color: #cbd5e1 !important;
+}
+
+button.mini-day-cell.weekend:disabled {
+  color: #cbd5e1 !important;
 }

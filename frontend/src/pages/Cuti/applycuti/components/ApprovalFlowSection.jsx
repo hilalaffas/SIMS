@@ -3,51 +3,63 @@ import './LeaveForm.css';
 
 /**
  * Bagian: PILIH ALUR APPROVAL CUTI (Leader / SPV / Manager)
- * (dipecah dari LeaveForm.jsx supaya jadi file tersendiri)
+ * Nama prop mengikuti field payload backend (leaderEmployeeId/spvEmployeeId/managerEmployeeId)
+ * supaya tidak perlu mapping ulang saat submit ke API.
  */
 const ApprovalFlowSection = ({
-  leaderEmployeeId, setleaderEmployeeId,
-  spvEmployeeId, setspvEmployeeId,
-  managerEmployeeId, setmanagerEmployeeId,
-  leaderOptions = [],
-  spvOptions = [],
-  managerOptions = [],
-  currentUserRole,
+  leaderEmployeeId, setLeaderEmployeeId,
+  spvEmployeeId, setSpvEmployeeId,
+  managerEmployeeId, setManagerEmployeeId,
+  approvers = { LEADER: [], SPV: [], MANAGER: [] },
+  isSupervisor = false,
 }) => {
-  // Format deteksi huruf kecil untuk mencegah kesalahan penulisan string role
-  const isMember = currentUserRole.toLowerCase() === 'member';
-
   return (
     <div className="form-group">
       <label className="form-label">PILIH ALUR APPROVAL CUTI *</label>
       <div className="approval-row">
         <div className="approval-col">
           <span className="badge-approval leader">Leader</span>
-          <select value={leaderEmployeeId} onChange={(e) => setleaderEmployeeId(e.target.value)} className="form-control" required>
-            <option value="">Pilih...</option>
-            {!isMember && <option value="None">None</option>}
-            {leaderOptions.map(emp => (
-              <option key={emp.employeeId} value={emp.employeeId}>{emp.fullName}</option>
+          <select
+            value={isSupervisor ? '' : leaderEmployeeId}
+            onChange={(e) => setLeaderEmployeeId(e.target.value)}
+            className="form-control"
+            required={!isSupervisor}
+            disabled={isSupervisor}
+          >
+            <option value="">{isSupervisor ? 'None' : 'Pilih...'}</option>
+            {!isSupervisor && approvers.LEADER.map(person => (
+              <option key={person.employeeId} value={person.employeeId}>{person.fullName}</option>
             ))}
           </select>
         </div>
+
         <div className="approval-col">
           <span className="badge-approval spv">SPV</span>
-          <select value={spvEmployeeId} onChange={(e) => setspvEmployeeId(e.target.value)} className="form-control" required>
-            <option value="">Pilih...</option>
-            {!isMember && <option value="None">None</option>}
-            {spvOptions.map(emp => (
-              <option key={emp.employeeId} value={emp.employeeId}>{emp.fullName}</option>
+          <select
+            value={isSupervisor ? '' : spvEmployeeId}
+            onChange={(e) => setSpvEmployeeId(e.target.value)}
+            className="form-control"
+            required={!isSupervisor}
+            disabled={isSupervisor}
+          >
+            <option value="">{isSupervisor ? 'None' : 'Pilih...'}</option>
+            {!isSupervisor && approvers.SPV.map(person => (
+              <option key={person.employeeId} value={person.employeeId}>{person.fullName}</option>
             ))}
           </select>
         </div>
+
         <div className="approval-col">
           <span className="badge-approval manager">Manager</span>
-          <select value={managerEmployeeId} onChange={(e) => setmanagerEmployeeId(e.target.value)} className="form-control" required>
+          <select
+            value={managerEmployeeId}
+            onChange={(e) => setManagerEmployeeId(e.target.value)}
+            className="form-control"
+            required
+          >
             <option value="">Pilih...</option>
-            {!isMember && <option value="None">None</option>}
-            {managerOptions.map(emp => (
-              <option key={emp.employeeId} value={emp.employeeId}>{emp.fullName}</option>
+            {approvers.MANAGER.map(person => (
+              <option key={person.employeeId} value={person.employeeId}>{person.fullName}</option>
             ))}
           </select>
         </div>

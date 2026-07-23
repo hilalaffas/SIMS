@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { hariLiburNasional } from '../../../../utils/dateUtils'; // sesuaikan path file Anda
 import './LeaveForm.css';
 
-const localFormatDateDisplay = (dateStr) => {
+// Fungsi bantu format tanggal untuk ditampilkan di input (dd/mm/yyyy)
+const formatDateDisplay = (dateStr) => {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-');
   return `${d}/${m}/${y}`;
 };
 
+// Bangun 35 sel tanggal (5 baris x 7 kolom) untuk 1 bulan tampilan kalender mini
 const generate35Days = (viewDate) => {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -32,18 +33,17 @@ const generate35Days = (viewDate) => {
 
 /**
  * Bagian: JENIS PERMOHONAN CUTI, DURASI SESI SETENGAH HARI, DARI/SAMPAI TANGGAL
- * (dipecah dari LeaveForm.jsx supaya jadi file tersendiri)
+ * (satu-satunya tempat logika kalender mini berada, dipakai oleh LeaveForm)
  */
 const LeaveTypeDateSection = ({
-  leaveType, setleaveType,
-  leaveTypeId, setLeaveTypeId,
-  jenisCutiOptions = [],
+  jenisCuti, setJenisCuti,
   durasiSesi, setDurasiSesi,
-  startDate, setstartDate,
-  endDate, setendDate,
-  jedaHariKerja,
+  startDate, setStartDate,
+  endDate, setEndDate,
   dinamisBatasMinStr,
   todayStr,
+  leaveTypes = [],
+  jumlahHariCuti = 0,
 }) => {
   const [showDariCalendar, setShowDariCalendar] = useState(false);
   const [showSampaiCalendar, setShowSampaiCalendar] = useState(false);
@@ -55,23 +55,29 @@ const LeaveTypeDateSection = ({
   const dariRef = useRef(null);
   const sampaiRef = useRef(null);
 
-  const isMendesak = leaveType === 'Cuti Urgent' || leaveType === 'Cuti Berduka';
+  // Normalisasi jenis cuti (huruf kecil, trim) supaya deteksi tidak sensitif terhadap variasi penulisan
+  const normalizedLeaveType = String(jenisCuti || '').trim().toLowerCase();
+  const isMendesak = ['cuti urgent', 'cuti berduka'].includes(normalizedLeaveType);
+  const isHalfDayLeave = normalizedLeaveType === 'cuti setengah hari';
 
-  const handleSelectDate = (item, setDateState, setViewDateState, setShowCalendar, minDateStr = null) => {
-    const selectedStr = `${item.year}-${String(item.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}`;
-    if (minDateStr && new Date(selectedStr) < new Date(minDateStr)) return;
-    setDateState(selectedStr);
-    setShowCalendar(false);
-  };
-
-  // PERBAIKAN: jika "Dari Tanggal" diubah menjadi lebih baru dari "Sampai Tanggal"
-  // yang sudah dipilih sebelumnya, reset "Sampai Tanggal" agar rentang tidak terbalik.
+  // Saat DARI/SAMPAI TANGGAL berubah, sinkronkan bulan yang tampil di kalender mini
   useEffect(() => {
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      setendDate('');
+    if (startDate) {
+      const dDate = new Date(startDate);
+      setDariViewDate(new Date(dDate.getFullYear(), dDate.getMonth(), 1));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate]);
+    if (endDate) {
+      const sDate = new Date(endDate);
+      setSampaiViewDate(new Date(sDate.getFullYear(), sDate.getMonth(), 1));
+    }
+  }, [startDate, endDate]);
+
+  // Saat jenis cuti "Setengah Hari", SAMPAI TANGGAL otomatis disamakan dengan DARI TANGGAL
+  useEffect(() => {
+    if (isHalfDayLeave && startDate && endDate !== startDate) {
+      setEndDate(startDate);
+    }
+  }, [isHalfDayLeave, startDate]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -82,9 +88,15 @@ const LeaveTypeDateSection = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleSelectDate = (item, setDateState, setShowCalendar, minDateStr = null, maxDateStr = null) => {
+    const selectedStr = `${item.year}-${String(item.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}`;
+    if (minDateStr && new Date(selectedStr) < new Date(minDateStr)) return;
+    if (maxDateStr && new Date(selectedStr) > new Date(maxDateStr)) return;
+    setDateState(selectedStr);
+    setShowCalendar(false);
+  };
 
-
-  const renderMiniCalendar = (viewDate, setViewDate, selectedDateStr, onSelect, minDateStr) => {
+  const renderMiniCalendar = (viewDate, setViewDate, selectedDateStr, onSelect, minDateStr, maxDateStr = null) => {
     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
     const days = generate35Days(viewDate);
     return (
@@ -103,20 +115,16 @@ const LeaveTypeDateSection = ({
           {days.map((item, idx) => {
             const itemStr = `${item.year}-${String(item.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}`;
             const isMelanggarBatasMin = minDateStr && new Date(itemStr) < new Date(minDateStr);
-
-            // Deteksi Weekend & Tanggal Merah Nasional
+            const isMelanggarBatasMax = maxDateStr && new Date(itemStr) > new Date(maxDateStr);
+            const isDisabledDay = isMelanggarBatasMin || isMelanggarBatasMax;
             const isWeekendDay = (new Date(item.year, item.month, item.day).getDay() === 0 || new Date(item.year, item.month, item.day).getDay() === 6);
-            const isTanggalMerah = hariLiburNasional.includes(itemStr);
-
-            // Tombol di-disable jika melanggar batas minimal kerja ATAU weekend ATAU tanggal merah
-            const isDisabled = isMelanggarBatasMin || isWeekendDay || isTanggalMerah;
 
             return (
               <button
                 key={idx} type="button"
-                disabled={isDisabled}
+                disabled={isDisabledDay}
                 onClick={() => onSelect(item)}
-                className={`mini-day-cell ${!item.isCurrentMonth ? 'outside-month' : ''} ${itemStr === selectedDateStr ? 'selected' : ''} ${itemStr === todayStr ? 'today' : ''} ${isWeekendDay ? 'weekend' : ''} ${isTanggalMerah ? 'holiday' : ''}`}
+                className={`mini-day-cell ${!item.isCurrentMonth ? 'outside-month' : ''} ${itemStr === selectedDateStr ? 'selected' : ''} ${itemStr === todayStr ? 'today' : ''} ${isWeekendDay ? 'weekend' : ''}`}
               >
                 {item.day}
               </button>
@@ -131,24 +139,12 @@ const LeaveTypeDateSection = ({
     <>
       <div className="form-group">
         <label className="form-label">JENIS PERMOHONAN CUTI</label>
-        <select
-          value={leaveTypeId || ''}
-          onChange={(e) => {
-            const id = e.target.value;
-            const opt = jenisCutiOptions.find(o => String(o.leaveTypeId) === id);
-            setLeaveTypeId(id ? Number(id) : null);
-            setleaveType(opt ? opt.name : '');
-          }}
-          className="form-control"
-        >
-          <option value="">Pilih jenis cuti...</option>
-          {jenisCutiOptions.map(opt => (
-            <option key={opt.leaveTypeId} value={opt.leaveTypeId}>{opt.name}</option>
-          ))}
+        <select value={jenisCuti} onChange={(e) => setJenisCuti(e.target.value)} className="form-control">
+          {leaveTypes.map(type => <option key={type.leaveTypeId} value={type.name}>{type.name}</option>)}
         </select>
       </div>
 
-      {(leaveType === 'Cuti setengah hari') && (
+      {isHalfDayLeave && (
         <div className="form-group">
           <label className="form-label">DURASI SESI SETENGAH HARI *</label>
           <select value={durasiSesi} onChange={(e) => setDurasiSesi(e.target.value)} className="form-control">
@@ -162,37 +158,38 @@ const LeaveTypeDateSection = ({
         <div className="form-group flex-1" ref={dariRef} style={{ position: 'relative' }}>
           <label className="form-label">DARI TANGGAL</label>
           <div className="input-with-icon">
-            <input type="text" readOnly value={localFormatDateDisplay(startDate)} onClick={() => setShowDariCalendar(!showDariCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
+            <input type="text" readOnly value={formatDateDisplay(startDate)} onClick={() => setShowDariCalendar(!showDariCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
             <i className="fa-regular fa-calendar-days input-icon-inside"></i>
           </div>
           {showDariCalendar && (() => {
             const batasMinDariStr = isMendesak ? todayStr : dinamisBatasMinStr;
-            return renderMiniCalendar(dariViewDate, setDariViewDate, startDate, (item) => handleSelectDate(item, setstartDate, setShowDariCalendar, batasMinDariStr), batasMinDariStr);
+            return renderMiniCalendar(dariViewDate, setDariViewDate, startDate, (item) => handleSelectDate(item, setStartDate, setShowDariCalendar, batasMinDariStr), batasMinDariStr);
           })()}
         </div>
 
         <div className="form-group flex-1" ref={sampaiRef} style={{ position: 'relative' }}>
           <label className="form-label">SAMPAI TANGGAL</label>
           <div className="input-with-icon">
-            <input type="text" readOnly value={localFormatDateDisplay(endDate)} onClick={() => setShowSampaiCalendar(!showSampaiCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
+            <input type="text" readOnly value={formatDateDisplay(endDate)} onClick={() => setShowSampaiCalendar(!showSampaiCalendar)} className="form-control text-input-clickable" placeholder="dd/mm/yyyy" />
             <i className="fa-regular fa-calendar-days input-icon-inside"></i>
           </div>
           {showSampaiCalendar && (() => {
-            const batasMinSampaiStr = isMendesak
-              ? startDate
-              : (new Date(startDate) > new Date(dinamisBatasMinStr) ? startDate : dinamisBatasMinStr);
+            const batasMinSampaiStr = startDate;
+            // Untuk "Cuti Setengah Hari", SAMPAI TANGGAL dikunci hanya ke hari yang sama dengan DARI TANGGAL
+            const batasMaxSampaiStr = isHalfDayLeave ? startDate : null;
 
             return renderMiniCalendar(
               sampaiViewDate, setSampaiViewDate, endDate,
-              (item) => handleSelectDate(item, setendDate, setShowSampaiCalendar, batasMinSampaiStr),
-              batasMinSampaiStr
+              (item) => handleSelectDate(item, setEndDate, setShowSampaiCalendar, batasMinSampaiStr, batasMaxSampaiStr),
+              batasMinSampaiStr,
+              batasMaxSampaiStr
             );
           })()}
         </div>
       </div>
 
       <div className="duration-info-alert">
-        Durasi pengajuan: {jedaHariKerja === 0 ? "1 Hari" : `${jedaHariKerja} Hari Kerja`}
+        Durasi pengajuan: {jumlahHariCuti} Hari Kerja
       </div>
     </>
   );

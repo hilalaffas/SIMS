@@ -1,70 +1,70 @@
 import React from 'react';
 import './LeaveHistory.css';
 
-// PINDAHAN DARI ApplyCuti.jsx (Data dummy panjang dialihkan ke sini)
-export const getFallbackDummyRiwayat = (userId, userName) => [
-  {
-    userId: 'karyawan_01',
-    userName: 'Andi Wijaya',            
-    id: 101,
-    jenisCuti: 'CUTI TAHUNAN',
-    stringTanggal: '25 June - 27 June 2026',
-    totalHari: '3 Hari',
-    status: 'Dikembalikan',
-    isUnread: true,
-    rawDetail: {
-      jenisCuti: 'Cuti tahunan',
-      dariTanggal: '2026-06-25',
-      sampaiTanggal: '2026-06-27',
-      totalHari: '3 Hari',
-      alasan: 'Ada keperluan keluarga yang mendesak',
-      pekerjaanTertunda: 'Pekerjaan harian di-handle oleh Tim A',
-      leader: { nama: 'Aden', status: 'Approved' },
-      spv: { nama: 'Mandala', status: 'Returned', catatan: 'Mohon reschedule kembali jadwal backup pekerjaan agar tidak tabrakan dengan perilisan fitur baru.' },
-      manager: { nama: 'Ade Mulya', status: 'Pending' }
-    }
-  },
-  {
-    userId: userId,
-    userName: userName,
-    id: 102,
-    jenisCuti: 'CUTI TAHUNAN',
-    stringTanggal: '10 June - 12 June 2026',
-    totalHari: '3 Hari',
-    status: 'Disetujui (ACC)',
-    isUnread: false,
-    rawDetail: {
-      jenisCuti: 'Cuti tahunan',
-      dariTanggal: '2026-06-10',
-      sampaiTanggal: '2026-06-12',
-      totalHari: '3 Hari',
-      alasan: 'Acara pernikahan saudara kandung',
-      pekerjaanTertunda: 'Semua task sprint sudah diclose dan dimonitor oleh Kak Guntur',
-      leader: { nama: 'Guntur', status: 'Approved' },
-      spv: { nama: 'Mandala', status: 'Approved' },
-      manager: { nama: 'Ade Mulya', status: 'Approved' }
-    }
-  }
-];
-
 const LeaveHistory = ({
-  riwayatCuti,
+  riwayatCuti = [],
   filterStatus,
   setFilterStatus,
   handleOpenDetail,
   handleEditKembali
 }) => {
-  // MODIFIKASI 1: Amankan pencocokan filter status (termasuk toleransi "proses" dan "dalam proses")
-  const filteredRiwayat = riwayatCuti.filter(item => {
+  // Filter data riwayat berdasarkan status yang dipilih
+  const filteredRiwayat = riwayatCuti.filter((item) => {
     if (filterStatus === 'Semua Berkas') return true;
+    
     const statusLower = String(item.status || '').toLowerCase();
     if (filterStatus === 'Dalam Proses') {
       return statusLower === 'proses' || statusLower === 'dalam proses';
     }
+    
     return item.status === filterStatus;
   });
 
-  const adakahNotifikasiGlobal = riwayatCuti.some(item => item.isUnread);
+  // Fungsi pembantu untuk mendapatkan timestamp sebagai patokan pengurutan
+  const getSortTimestamp = (item) => {
+    const rawDari = item.rawDetail?.dariTanggal;
+    if (rawDari) {
+      const timestamp = new Date(rawDari).getTime();
+      if (!isNaN(timestamp)) return timestamp;
+    }
+
+    const stringTanggal = item.stringTanggal || '';
+    const match = stringTanggal.match(/^(\d{1,2})\s+([A-Za-z]+)\s*-\s*\d{1,2}\s+[A-Za-z]+\s+(\d{4})/);
+    if (match) {
+      const parsed = new Date(`${match[1]} ${match[2]} ${match[3]}`).getTime();
+      if (!isNaN(parsed)) return parsed;
+    }
+
+    return item.id || 0;
+  };
+
+  // Urutkan pengajuan terbaru di posisi paling atas
+  const sortedRiwayat = [...filteredRiwayat].sort(
+    (a, b) => getSortTimestamp(b) - getSortTimestamp(a)
+  );
+
+  const hasGlobalNotification = riwayatCuti.some((item) => item.isUnread);
+
+  // Helper untuk mendapatkan nama jenis cuti
+  const getLeaveTypeName = (jenisCuti) => {
+    if (typeof jenisCuti === 'object' && jenisCuti !== null) {
+      return jenisCuti.name;
+    }
+    return jenisCuti;
+  };
+
+  // Ubah "3 Agu 2026 - 3 Agu 2026" menjadi "3 Agu - 3 Agu 2026"
+  // (tahun pada tanggal awal disembunyikan jika sama dengan tahun tanggal akhir)
+  const formatShortDateRange = (rangeStr) => {
+    if (!rangeStr) return rangeStr;
+    const match = rangeStr.trim().match(/^(\d{1,2}\s+\S+)\s+(\d{4})\s*-\s*(\d{1,2}\s+\S+)\s+(\d{4})$/);
+    if (!match) return rangeStr;
+
+    const [, startPart, startYear, endPart, endYear] = match;
+    return startYear === endYear
+      ? `${startPart} - ${endPart} ${endYear}`
+      : `${startPart} ${startYear} - ${endPart} ${endYear}`;
+  };
 
   return (
     <div className="history-container">
@@ -73,12 +73,17 @@ const LeaveHistory = ({
           <i className="fa-solid fa-clock-rotate-left history-header-icon"></i>
           <h3 className="history-title">
             Riwayat & Status Pengajuan 
-            {adakahNotifikasiGlobal && <span className="dot-badge-global"></span>}
+            {hasGlobalNotification && <span className="dot-badge-global"></span>}
           </h3>
         </div>
+
         <div className="history-filter-container">
           <span className="filter-label">FILTER:</span>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="filter-dropdown">
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="filter-dropdown"
+          >
             <option value="Semua Berkas">Semua Berkas</option>
             <option value="Dalam Proses">Dalam Proses</option>
             <option value="Disetujui (ACC)">Disetujui (ACC)</option>
@@ -89,61 +94,70 @@ const LeaveHistory = ({
       </div>
 
       <div className="history-body">
-        {filteredRiwayat.length === 0 ? (
+        {sortedRiwayat.length === 0 ? (
           <div className="empty-history-box">Belum ada riwayat pengajuan.</div>
         ) : (
           <div className="history-list">
-            {filteredRiwayat.map((item) => {
-              // Pengaman string untuk mencegah error runtime .toLowerCase() & .toUpperCase()
+            {sortedRiwayat.map((item) => {
               const statusLower = String(item.status || 'proses').toLowerCase();
               const statusUpper = String(item.status || 'PROSES').toUpperCase();
               const classCleanStatus = statusLower.replace(/[^a-z]/g, '');
-              
-              // MODIFIKASI 2: Normalisasi deteksi status proses agar pengajuan baru langsung klop
+
               const isProses = statusLower === 'proses' || statusLower === 'dalam proses';
               const isDikembalikan = classCleanStatus === 'dikembalikan';
 
               return (
-                <div key={item.id} className={`history-item-card ${isDikembalikan ? 'border-alert-red' : ''}`}>
-                  {/* PERBAIKAN 1: Bagian kiri sekarang dapat diklik saat status DALAM PROSES */}
-                  <div className="history-item-left" onClick={() => handleOpenDetail(item)} style={{ cursor: 'pointer' }}>
+                <div
+                  key={item.id}
+                  className={`history-item-card ${isDikembalikan ? 'border-alert-red' : ''}`}
+                >
+                  <div
+                    className="history-item-left clickable"
+                    onClick={() => handleOpenDetail(item)}
+                  >
                     {item.isUnread && <span className="dot-badge-item"></span>}
                     <div className="history-item-info">
-                      {/* PERBAIKAN 2: Mengamankan tipe data object leaveType dari backend */}
                       <span className="history-item-leave-type">
-                        {typeof item.jenisCuti === 'object' && item.jenisCuti !== null 
-                          ? item.jenisCuti.name 
-                          : item.jenisCuti}
+                        {getLeaveTypeName(item.jenisCuti)}
                       </span>
                       <p className="history-item-dates">
-                        {item.stringTanggal} {item.totalHari && `(${item.totalHari})`}
+                        {formatShortDateRange(item.stringTanggal)} {item.totalHari && `(${item.totalHari})`}
                       </p>
                     </div>
                   </div>
 
                   <div className="history-item-actions">
                     {isProses ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        {/* PERBAIKAN 3: Menambahkan onClick dan style pointer pada badge DALAM PROSES */}
-                        <span 
-                          className="status-badge-list dalam-proses" 
-                          onClick={() => handleOpenDetail(item)} 
-                          style={{ cursor: 'pointer' }}
+                      <div className="action-wrapper">
+                        <span
+                          className="status-badge-list dalam-proses clickable"
+                          onClick={() => handleOpenDetail(item)}
                         >
                           DALAM PROSES
                         </span>
                       </div>
                     ) : isDikembalikan ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span className="status-badge-list dikembalikan" onClick={() => handleOpenDetail(item)} style={{ cursor: 'pointer' }}>
+                      <div className="action-wrapper">
+                        <span
+                          className="status-badge-list dikembalikan clickable"
+                          onClick={() => handleOpenDetail(item)}
+                        >
                           DIKEMBALIKAN
                         </span>
-                        <button type="button" className="btn-edit-inline" onClick={() => handleEditKembali(item.id)}>
+                        <button
+                          type="button"
+                          className="btn-edit-inline"
+                          onClick={() => handleEditKembali(item.id)}
+                        >
                           <i className="fa-regular fa-pen-to-square"></i> Edit
                         </button>
                       </div>
                     ) : (
-                      <button type="button" className={`status-badge-btn ${classCleanStatus}`} onClick={() => handleOpenDetail(item)}>
+                      <button
+                        type="button"
+                        className={`status-badge-btn ${classCleanStatus}`}
+                        onClick={() => handleOpenDetail(item)}
+                      >
                         {classCleanStatus === 'disetujuiacc' ? 'DISETUJUI' : statusUpper}
                       </button>
                     )}
