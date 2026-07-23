@@ -23,6 +23,7 @@ import sys.hris.sims.role.repository.RoleRepository;
 import sys.hris.sims.security.JwtService;
 import sys.hris.sims.user.repository.UserRepository;
 import sys.hris.sims.auth.service.AuthService;
+import sys.hris.sims.storage.CloudinaryService;
 import sys.hris.sims.activity_logs.service.ActivityLogService;
 import org.springframework.security.core.Authentication;
 import sys.hris.sims.auth.dto.ChangePasswordRequest;
@@ -48,8 +49,9 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final ActivityLogService activityLogService;
     private final AuthService authService;
+    private final CloudinaryService cloudinaryService;
 
-    public AuthController(UserRepository userRepository,
+        public AuthController(UserRepository userRepository,
                           RoleRepository roleRepository,
                           EmployeeRepository employeeRepository,
                           EmergencyContactRelationshipRepository relationshipRepository,
@@ -57,7 +59,8 @@ public class AuthController {
                           JwtService jwtService,
                           PasswordEncoder passwordEncoder,
                           ActivityLogService activityLogService,
-                          AuthService authService) {
+                          AuthService authService,
+                          CloudinaryService cloudinaryService) {
 
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -68,6 +71,7 @@ public class AuthController {
         this.passwordEncoder = passwordEncoder;
         this.activityLogService = activityLogService;
         this.authService = authService;
+        this.cloudinaryService = cloudinaryService;
     }
 
     // helper method ambil userId dari token
@@ -141,15 +145,7 @@ public class AuthController {
             String savedPhotoPath = null;
             if (request.getPhoto() != null && !request.getPhoto().isEmpty()) {
                 try {
-                    MultipartFile file = request.getPhoto();
-                    Path uploadPath = Paths.get("uploads/photos/");
-                    if (!Files.exists(uploadPath)) {
-                        Files.createDirectories(uploadPath);
-                    }
-                    String fileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
-                    Path filePath = uploadPath.resolve(fileName);
-                    Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-                    savedPhotoPath = filePath.toString();
+                    savedPhotoPath = cloudinaryService.uploadFoto(request.getPhoto(), "user-" + user.getUserId());
                 } catch (Exception e) {
                     return ResponseEntity.status(500).body("Gagal menyimpan foto: " + e.getMessage());
                 }

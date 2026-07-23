@@ -35,6 +35,7 @@ public class ProfileController {
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final EmergencyContactRelationshipRepository relationshipRepository;
+    private final CloudinaryService cloudinaryService;
 
     @GetMapping("/me")
     public ResponseEntity<?> getMyProfile(Authentication authentication) {
@@ -58,7 +59,7 @@ public class ProfileController {
                 if (relationship == null) return ResponseEntity.badRequest().body("Hubungan kontak darurat tidak valid");
                 employee.setEmergencyContactRelationship(relationship);
             }
-            if (request.getPhoto() != null && !request.getPhoto().isEmpty()) employee.setPhoto(storePhoto(request));
+            if (request.getPhoto() != null && !request.getPhoto().isEmpty()) employee.setPhoto(storePhoto(request, user));
             employeeRepository.save(employee);
         }
         userRepository.save(user);
@@ -88,14 +89,9 @@ public class ProfileController {
                 .build();
     }
 
-    private String storePhoto(UpdateProfileRequest request) {
+    private String storePhoto(UpdateProfileRequest request, User user) {
         try {
-            Path directory = Paths.get("uploads", "photos");
-            Files.createDirectories(directory);
-            String filename = UUID.randomUUID() + "_" + request.getPhoto().getOriginalFilename();
-            Path target = directory.resolve(filename);
-            Files.copy(request.getPhoto().getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            return target.toString();
+            return cloudinaryService.uploadFoto(request.getPhoto(), "user-" + user.getUserId());
         } catch (Exception exception) {
             throw new IllegalStateException("Gagal menyimpan foto profil", exception);
         }
@@ -103,8 +99,9 @@ public class ProfileController {
 
     private String photoUrl(String photo) {
         if (!hasText(photo)) return null;
+        if (photo.startsWith("http://") || photo.startsWith("https://")) return photo; //   sudah URL Cloudinary penuh
         String normalised = photo.replace('\\', '/');
-        return "/" + (normalised.startsWith("uploads/") ? normalised : "uploads/photos/" + Paths.get(normalised).getFileName());
+        return "/" + (normalised.startsWith("uploads/") ? normalised : "uploads/photos/" + Paths.get    (normalised).getFileName());
     }
 
     private String nullToDash(String value) { return hasText(value) ? value : "-"; }

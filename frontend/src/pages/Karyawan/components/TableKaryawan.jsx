@@ -71,7 +71,9 @@ const TableKaryawan = ({ data, currentUserRole, onEdit }) => {
             {/* 4. Render menggunakan filteredData di sini, BUKAN data.map */}
             {filteredData.map((emp) => {
               const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://sims-backend-api-61je.onrender.com';
-              const photoUrl = emp.photo ? `${API_BASE_URL}/${emp.photo}` : `https://ui-avatars.com/api/?name=${emp.fullName}`;
+              const photoUrl = emp.photo
+                ? (emp.photo.startsWith('http') ? emp.photo : `${API_BASE_URL}/${emp.photo}`)
+                : `https://ui-avatars.com/api/?name=${emp.fullName}`;
 
               return (
                 <tr key={emp.employeeId || emp.id}>

@@ -33,6 +33,7 @@ import sys.hris.sims.employee.dto.UpdateEmployeeRequest;
 import sys.hris.sims.employee.entity.Employee;
 import sys.hris.sims.employee.repository.EmergencyContactRelationshipRepository;
 import sys.hris.sims.employee.service.EmployeeService;
+import sys.hris.sims.storage.CloudinaryService;
 import sys.hris.sims.user.entity.User;
 import sys.hris.sims.user.repository.UserRepository;
 
@@ -49,6 +50,7 @@ public class EmployeeController {
     private final EmergencyContactRelationshipRepository relationshipRepository;
 
     private final DivisiRepository divisiRepository;
+    private final CloudinaryService cloudinaryService;
 
     // helper method ambil userId dari token
     private Long getCurrentUserId(Authentication authentication) {
@@ -156,19 +158,7 @@ public class EmployeeController {
 
         if (request.getPhoto() != null && !request.getPhoto().isEmpty()) {
             try {
-                if (employee.getPhoto() != null) {
-                    Files.deleteIfExists(Paths.get(employee.getPhoto()));
-                }
-
-                String uploadDir = "uploads/photos/";
-                Path uploadPath = Paths.get(uploadDir);
-                if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
-
-                String fileName = UUID.randomUUID().toString() + "_" + request.getPhoto().getOriginalFilename();
-                Path filePath = uploadPath.resolve(fileName);
-                Files.copy(request.getPhoto().getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-                employee.setPhoto(filePath.toString());
+                employee.setPhoto(cloudinaryService.uploadFoto(request.getPhoto(), "user-" + employee.getUser().        getUserId()));
             } catch (Exception e) {
                 return ResponseEntity.internalServerError().body("Gagal mengupdate foto: " + e.getMessage());
             }
@@ -283,23 +273,10 @@ public class EmployeeController {
         // 3. LOGIKA UPLOAD FOTO BARU
         if (request.getPhoto() != null && !request.getPhoto().isEmpty()) {
             try {
-                // Hapus file lama jika ada (agar tidak menumpuk)
-                if (employee.getPhoto() != null) {
-                    Files.deleteIfExists(Paths.get(employee.getPhoto()));
-                }
-
-                String uploadDir = "uploads/photos/";
-                Path uploadPath = Paths.get(uploadDir);
-                if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
-
-                String fileName = UUID.randomUUID().toString() + "_" + request.getPhoto().getOriginalFilename();
-                Path filePath = uploadPath.resolve(fileName);
-                Files.copy(request.getPhoto().getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-                
-                employee.setPhoto(filePath.toString());
+                employee.setPhoto(cloudinaryService.uploadFoto(request.getPhoto(), "user-" + employee.getUser().        getUserId()));
             } catch (Exception e) {
-                return ResponseEntity.internalServerError().body("Gagal mengupdate foto: " + e.getMessage());
-            }
+        return ResponseEntity.internalServerError().body("Gagal mengupdate foto: " + e.getMessage());
+    }
         }
 
         // 4. Simpan perubahan
