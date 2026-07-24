@@ -173,6 +173,14 @@ public class SecurityConfig {
                                 "/api/cuti/balance/me")
                         .authenticated()
 
+                        // [BARU] Sisa cuti tahunan karyawan LAIN (dipakai form
+                        // Manajemen Data Pegawai) -- dibatasi ADMIN_ROLES saja,
+                        // ditaruh SEBELUM catch-all "/api/cuti/**" di bawah
+                        // supaya tidak ikut kebuka untuk LEADER/SPV/MANAGER.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/cuti/balance/*")
+                        .hasAnyRole(ADMIN_ROLES)
+
                         .requestMatchers(HttpMethod.GET,
                                 "/api/cuti/me")
                         .authenticated()

@@ -23,4 +23,7 @@ public class UpdateEmployeeRequest {
     private String position;      // Jabatan
     private Boolean isActive;     // Status akun: Aktif / Nonaktif
     private String joinDate;      // Tanggal gabung, format yyyy-MM-dd (di-parse manual di controller)
+
+    // [BARU] Sisa Cuti (manual, diisi HR) -- menggantikan field dummy "Sisa Cuti Sakit"
+    private Integer manualLeaveBalance;
 }

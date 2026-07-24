@@ -102,6 +102,13 @@ public class LeaveController {
         return ResponseEntity.ok(cutiService.getMyLeaveBalance(authentication.getName()));
     }
 
+    // [BARU] GET sisa cuti tahunan karyawan TERTENTU, dipakai HR/Admin di
+    // form Manajemen Data Pegawai (ModalDetailKaryawan.jsx)
+    @GetMapping("/balance/{employeeId}")
+    public ResponseEntity<LeaveBalanceResponse> getLeaveBalanceByEmployeeId(@PathVariable Long employeeId) {
+        return ResponseEntity.ok(cutiService.getLeaveBalanceByEmployeeId(employeeId));
+    }
+
     // GET cuti yang perlu diproses oleh role atasan yang sedang login
     @GetMapping("/approvals/my-task")
     public ResponseEntity<List<LeaveApprovalResponse>> getMyApprovalTasks(Authentication authentication) {

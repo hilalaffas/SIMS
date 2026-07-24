@@ -34,7 +34,7 @@ const HeadlineKaryawan = ({ data = [] }) => {
       const nama = emp.fullName || '-';
       const role = emp.user?.roleId?.roleName || 'MEMBER';
       const divisi = emp.divisi?.namaDivisi || 'Umum';
-      const sisaCuti = emp.leave || '12';
+      const sisaCuti = emp.manualLeaveBalance ?? 0;
       const email = emp.email || '-'; 
       const telepon = emp.phone || emp.noTelp || emp.telepon || '-'; 
       const status = emp.isActive ? 'AKTIF' : 'NONAKTIF';

@@ -64,4 +64,12 @@ public class Employee {
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    // [BARU] Kuota "Sisa Cuti" yang diisi manual oleh HR (menggantikan
+    // field dummy "Sisa Cuti Sakit"). @Builder.Default WAJIB ada supaya
+    // Employee.builder().build() tanpa isi field ini tetap default ke 0,
+    // bukan null -- soalnya kolomnya NOT NULL di database.
+    @Builder.Default
+    @Column(name = "manual_leave_balance", nullable = false)
+    private Integer manualLeaveBalance = 0;
 }

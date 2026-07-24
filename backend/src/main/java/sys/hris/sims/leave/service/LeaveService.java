@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -226,14 +227,53 @@ public class LeaveService {
     }
 
     public LeaveBalanceResponse getMyLeaveBalance(String username) {
-        Employee employee = getEmployeeByUsername(username);
+        return getLeaveBalance(getEmployeeByUsername(username));
+    }
+
+    // [BARU] Dipakai HR/Admin untuk melihat sisa cuti tahunan karyawan LAIN
+    // (form Manajemen Data Pegawai). Logikanya sengaja disatukan lewat
+    // getLeaveBalance(Employee) di bawah, supaya endpoint "punya sendiri"
+    // dan "punya orang lain" selalu konsisten satu sama lain.
+    public LeaveBalanceResponse getLeaveBalanceByEmployeeId(Long employeeId) {
+        Employee employee = karyawanRepository.findById(employeeId)
+                .orElseThrow(() -> new RuntimeException("Karyawan tidak ditemukan"));
+        return getLeaveBalance(employee);
+    }
+
+    // [BARU] Aturan Cuti Tahunan: baru mulai berhak 1 tahun setelah tanggal
+    // bergabung (joinDate), dan kuotanya di-refresh tiap tahun mengikuti
+    // tanggal bergabung tsb (bukan tahun kalender Jan-Des). Selama belum
+    // genap 1 tahun kerja, kuota & sisa cuti tahunan dianggap 0.
+    private LeaveBalanceResponse getLeaveBalance(Employee employee) {
+        LocalDate today = LocalDate.now();
+        LocalDate joinDate = employee.getJoinDate();
+        boolean belumBerhakCutiTahunan = joinDate == null || joinDate.plusYears(1).isAfter(today);
+
+        if (belumBerhakCutiTahunan) {
+            return new LeaveBalanceResponse(
+                    employee.getEmployeeId(),
+                    employee.getFullName(),
+                    BigDecimal.ZERO,
+                    BigDecimal.ZERO,
+                    BigDecimal.ZERO
+            );
+        }
+
         LeaveType annualLeave = leaveTypeRepository.findByNameIgnoreCase("Cuti tahunan")
                 .orElse(null);
-
         BigDecimal annualQuota = BigDecimal.valueOf(getAnnualQuota(employee, annualLeave));
+
+        // Tentukan periode cuti tahunan yang SEDANG berjalan (anniversary-based).
+        // Contoh: join 15 Mar 2023 & hari ini 20 Jul 2026 -> tahunKerjaPenuh = 3,
+        // periodeMulai = 15 Mar 2026, periodeSelesai = 15 Mar 2027.
+        long tahunKerjaPenuh = ChronoUnit.YEARS.between(joinDate, today);
+        LocalDate periodeMulai = joinDate.plusYears(tahunKerjaPenuh);
+        LocalDate periodeSelesai = periodeMulai.plusYears(1);
+
         BigDecimal usedAnnualLeave = getCutiByKaryawan(employee.getEmployeeId()).stream()
                 .filter(cuti -> ACTION_APPROVED.equalsIgnoreCase(cuti.getStatus().getStatusName()))
                 .filter(cuti -> Boolean.TRUE.equals(cuti.getLeaveType().getDeductsAnnualQuota()))
+                .filter(cuti -> !cuti.getStartDate().isBefore(periodeMulai) && cuti.getStartDate().isBefore(periodeSelesai))
                 .map(LeaveRequest::getTotalDays)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 

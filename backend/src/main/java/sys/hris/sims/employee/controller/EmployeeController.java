@@ -207,6 +207,9 @@ public class EmployeeController {
         // [BARU] Jabatan (position)
         if (isNotBlank(request.getPosition())) employee.setPosition(request.getPosition());
 
+        // [BARU] Sisa Cuti (manual, diisi HR)
+        if (request.getManualLeaveBalance() != null) employee.setManualLeaveBalance(request.getManualLeaveBalance());
+
         // [BARU] Status akun
         if (request.getIsActive() != null) employee.setIsActive(request.getIsActive());
 

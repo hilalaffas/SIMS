@@ -42,6 +42,10 @@ const dayText = (value) => Number(value).toLocaleString('id-ID', {
 
 export const getLeaveBalance = () => api.get('/api/cuti/balance/me');
 
+// [BARU] Dipakai ModalDetailKaryawan.jsx (HR) untuk melihat sisa cuti
+// tahunan karyawan lain -- bukan dirinya sendiri.
+export const getLeaveBalanceByEmployeeId = (employeeId) => api.get(`/api/cuti/balance/${employeeId}`);
+
 // [UBAH] Tambah employeeId opsional -- dipakai form Cuti Susulan (HR pilih
 // approver ATAS NAMA karyawan lain, bukan dirinya sendiri). Pemanggilan lama
 // tanpa employeeId (mis. Ajukan Cuti normal) tetap jalan persis seperti sebelumnya,

@@ -6,6 +6,7 @@ import { updateUser } from '../../../services/userService';
 import { getAllDivisi } from '../../../services/divisiService';
 import { getAllRelationships } from '../../../services/relationshipService';
 import { getAllRoles } from '../../../services/roleService';
+import { getLeaveBalanceByEmployeeId } from '../../../services/CutiService';
 
 const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUserRole, onSave, onDelete, resetRequestId = null }) => {
   // isOpen diberi default `true` karena Karyawan.jsx (parent) memanggil modal ini
@@ -18,13 +19,17 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
     namaLengkap: '', nik: '', jabatan: '', alamat: '',
     email: '', divisiId: '', telp: '', namaDarurat: '', telpDarurat: '', hubDarurat: '',
     tglGabung: '', username: '', password: '', role: '', status: '',
-    cutiTahunan: 0, cutiSakit: 0
+    annualLeaveBalance: 0, manualLeaveBalance: 0
   });
 
   const [showPassword, setShowPassword] = useState(false);
   const [notification, setNotification] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // [BARU] Info sisa cuti tahunan -- dihitung backend, bukan diketik manual
+  const [annualLeaveInfo, setAnnualLeaveInfo] = useState(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(true);
 
   // Daftar divisi diambil dari backend, sama seperti FormKaryawan, supaya
   // otomatis ikut update begitu ada penambahan/perubahan divisi.
@@ -69,6 +74,28 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
     return () => { isMounted = false; };
   }, []);
 
+  // [BARU] Ambil sisa cuti tahunan (dihitung otomatis oleh backend) setiap
+  // kali modal dibuka untuk karyawan yang berbeda.
+  useEffect(() => {
+    const targetEmployeeId = employeeData?.employeeId ?? employeeData?.id;
+    if (!targetEmployeeId) {
+      setAnnualLeaveInfo(null);
+      setIsLoadingBalance(false);
+      return;
+    }
+    let isMounted = true;
+    setIsLoadingBalance(true);
+    getLeaveBalanceByEmployeeId(targetEmployeeId)
+      .then((data) => {
+        if (!isMounted) return;
+        setAnnualLeaveInfo(data);
+        setFormData((prev) => ({ ...prev, annualLeaveBalance: data?.remainingAnnualLeave ?? 0 }));
+      })
+      .catch(() => { if (isMounted) setAnnualLeaveInfo(null); })
+      .finally(() => { if (isMounted) setIsLoadingBalance(false); });
+    return () => { isMounted = false; };
+  }, [employeeData]);
+
   // Mengisi form ketika data karyawan (dari tombol edit) masuk
   useEffect(() => {
     if (employeeData) {
@@ -98,8 +125,12 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
         password: '',
         role: employeeData.user?.roleId?.roleName || '',
         status: employeeData.isActive ? 'Aktif' : 'Nonaktif',
-        cutiTahunan: employeeData.leave || 0,
-        cutiSakit: employeeData.sickLeave || 12
+        // [UBAH] annualLeaveBalance diisi oleh useEffect terpisah di atas
+        // (fetch ke backend) -- di sini default 0 dulu sambil menunggu respons.
+        annualLeaveBalance: 0,
+        // [UBAH] Sisa Cuti sekarang manual & diambil dari kolom
+        // manual_leave_balance milik karyawan (menggantikan dummy cutiSakit)
+        manualLeaveBalance: employeeData.manualLeaveBalance ?? 0
       });
     }
   }, [employeeData]);
@@ -155,6 +186,9 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
     if (relasiTerpilih) employeeForm.append('emergencyContactRelationshipId', relasiTerpilih.id);
     // [BARU] Jabatan (kolom baru di backend, lihat migration V20)
     if (formData.jabatan) employeeForm.append('position', formData.jabatan);
+    // [BARU] Sisa Cuti (manual) -- annualLeaveBalance TIDAK dikirim karena
+    // itu dihitung otomatis oleh backend, bukan field yang bisa diedit HR.
+    employeeForm.append('manualLeaveBalance', formData.manualLeaveBalance);
     // [BARU] Status akun aktif/nonaktif -- FormData akan mengubah boolean JS
     // menjadi string "true"/"false", dan Spring @ModelAttribute otomatis
     // mem-parsingnya kembali menjadi Boolean.
@@ -378,17 +412,35 @@ const ModalDetailKaryawan = ({ isOpen = true, onClose, employeeData, currentUser
             <div className="form-grid_detail_karyawan">
               <div className="form-group_detail_karyawan green-bg-group_detail_karyawan">
                 <label>SISA CUTI TAHUNAN *</label>
-                <input type="number" name="cutiTahunan" value={formData.cutiTahunan} onChange={handleInputChange} disabled title="Belum tersambung ke database, lihat catatan di bawah form." />
+                <input
+                  type="number"
+                  name="annualLeaveBalance"
+                  value={isLoadingBalance ? '' : formData.annualLeaveBalance}
+                  onChange={handleInputChange}
+                  disabled
+                  placeholder={isLoadingBalance ? 'Memuat...' : ''}
+                  title={
+                    annualLeaveInfo
+                      ? `Kuota ${annualLeaveInfo.annualQuota} hari, terpakai ${annualLeaveInfo.usedAnnualLeave} hari tahun berjalan.${Number(annualLeaveInfo.annualQuota) === 0 ? ' Belum berhak cuti tahunan (masa kerja belum genap 1 tahun).' : ''}`
+                      : 'Dihitung otomatis oleh sistem: mulai berlaku 1 tahun setelah tanggal bergabung, refresh tiap tahun.'
+                  }
+                />
               </div>
               <div className="form-group_detail_karyawan green-bg-group_detail_karyawan">
-                <label>SISA CUTI SAKIT</label>
-                <input type="number" name="cutiSakit" value={formData.cutiSakit} onChange={handleInputChange} disabled title="Belum tersambung ke database, lihat catatan di bawah form." />
+                <label>SISA CUTI</label>
+                <input
+                  type="number"
+                  name="manualLeaveBalance"
+                  value={formData.manualLeaveBalance}
+                  onChange={handleInputChange}
+                  title="Diisi manual oleh HR."
+                />
               </div>
             </div>
-            <p style={{ fontSize: '12px', color: '#92400e', background: '#fef3c7', padding: '8px 12px', borderRadius: '6px', margin: '8px 0 0' }}>
-              ⚠️ Kuota cuti di atas belum tersambung ke database -- tabel <code>employees</code> belum punya kolom kuota per-karyawan,
-              dan sistem cuti saat ini dihitung dari aturan per jenis cuti di tabel <code>leave_types</code>, bukan kuota manual per orang.
-              Nilai di sini murni tampilan sementara dan tidak ikut tersimpan.
+            <p style={{ fontSize: '12px', color: '#374151', background: '#f3f4f6', padding: '8px 12px', borderRadius: '6px', margin: '8px 0 0' }}>
+              ℹ️ <strong>Sisa Cuti Tahunan</strong> dihitung otomatis: mulai berlaku 1 tahun setelah tanggal bergabung, dan
+              refresh tiap tahun mengikuti tanggal bergabung tersebut -- field ini tidak bisa diketik manual.
+              <strong> Sisa Cuti</strong> di sebelahnya adalah kuota tambahan yang boleh diisi bebas oleh HR.
             </p>
           </div>
 
